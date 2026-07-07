@@ -76,3 +76,10 @@ MINIMAX_GROUP_ID=
 - 每个 Agent 只写自己负责的状态字段，便于排错、观测和替换。
 - 规则逻辑负责确定性计算，例如发言统计；LLM 负责语义理解，例如纪要、待办和洞察。
 - fallback 模式保证系统在没有模型 Key、外部 API 异常时仍能完成主流程，这体现工程可用性。
+
+## 项目文档
+
+- [从零运行教程](docs/TUTORIAL.md)
+- [系统架构说明](docs/ARCHITECTURE.md)
+- [面试讲解稿](docs/INTERVIEW_GUIDE.md)
+- [项目路线图](docs/ROADMAP.md)
