@@ -137,3 +137,11 @@ This document records major engineering changes in the project.
 - Added `/api/v1/metrics` for in-process Agent stage timing and recent event inspection.
 - Added structured JSON logging with HTTP and pipeline stage duration events.
 - Added optional `requirements-whisperx.txt` and Docker build arg `INSTALL_WHISPERX` for WhisperX/pyannote deployments.
+
+## 14. Manual Retry
+
+- Added `POST /api/v1/meeting/{meeting_id}/retry` to requeue uploaded-audio meetings.
+- Reused the persisted `audio_path` stored in meeting metadata.
+- Added retry count and last retry timestamp into meeting metadata.
+- Protected active queued/processing meetings from duplicate retry unless `force=true`.
+- Added Retry controls to the Recent Meetings panel in the web console.

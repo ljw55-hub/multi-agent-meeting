@@ -47,6 +47,10 @@ class MeetingStartRequest(BaseModel):
     language: str = "zh"
 
 
+class MeetingRetryRequest(BaseModel):
+    force: bool = False
+
+
 class ActionStatusUpdate(BaseModel):
     status: str | None = None
     assignee: str | None = None
@@ -386,6 +390,56 @@ async def upload_audio(
         "status": "queued",
         "file_name": file.filename,
         "file_size_bytes": len(audio_data),
+        "queue_depth": depth,
+    }
+
+
+@router.post("/api/v1/meeting/{meeting_id}/retry", status_code=202)
+async def retry_meeting(meeting_id: str, request: MeetingRetryRequest | None = None) -> dict[str, Any]:
+    meta = _load_metadata(meeting_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail=f"meeting not found: {meeting_id}")
+
+    status = get_meeting_status(meeting_id) or {}
+    current_status = status.get("status", "")
+    force = bool(request.force) if request else False
+    if current_status in {"queued", "processing"} and not force:
+        raise HTTPException(status_code=409, detail="meeting is already queued or processing")
+
+    extra = meta.get("extra") or {}
+    audio_path = str(extra.get("audio_path") or "")
+    if not audio_path:
+        raise HTTPException(status_code=400, detail="retry requires an uploaded audio file")
+    if not Path(audio_path).is_file():
+        raise HTTPException(status_code=404, detail=f"uploaded audio file is missing: {audio_path}")
+
+    retry_count = int(extra.get("retry_count") or 0) + 1
+    extra = extra | {"retry_count": retry_count, "last_retry_at": _now()}
+    metadata = upsert_meeting_metadata(
+        meeting_id,
+        {
+            "language": meta.get("language", "zh"),
+            "audio_file_name": meta.get("audio_file_name", ""),
+            "extra": extra,
+        },
+    )
+    meeting_metadata[meeting_id] = metadata
+    _set_meeting_status(meeting_id, "queued", "retry_queued", 0, f"Retry queued, attempt {retry_count}")
+    depth = enqueue_meeting_job(
+        {
+            "type": "audio_file_retry",
+            "meeting_id": meeting_id,
+            "audio_path": audio_path,
+            "language": meta.get("language", "zh"),
+            "file_name": meta.get("audio_file_name", ""),
+            "retry_count": retry_count,
+        }
+    )
+    return {
+        "meeting_id": meeting_id,
+        "status": "queued",
+        "stage": "retry_queued",
+        "retry_count": retry_count,
         "queue_depth": depth,
     }
 

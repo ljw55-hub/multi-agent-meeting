@@ -284,6 +284,17 @@ label {
   min-height: 34px;
 }
 
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.row-actions button {
+  min-width: 72px;
+}
+
 .search-row input,
 .filters-row input,
 .filters-row select,

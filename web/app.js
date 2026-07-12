@@ -119,7 +119,10 @@ async function refreshMeetings() {
             <div><small>${escapeHtml(item.meeting_id)} | ${escapeHtml(status)} | ${progress}%</small></div>
             <div><small>${escapeHtml(item.audio_file_name || "no audio file")}</small></div>
           </div>
-          <button type="button" class="secondary" data-load-meeting="${escapeHtml(item.meeting_id)}">Load</button>
+          <div class="row-actions">
+            <button type="button" class="secondary" data-load-meeting="${escapeHtml(item.meeting_id)}">Load</button>
+            <button type="button" class="secondary" data-retry-meeting="${escapeHtml(item.meeting_id)}" ${item.audio_file_name ? "" : "disabled"}>Retry</button>
+          </div>
         </div>`;
     })
     .join("");
@@ -129,6 +132,22 @@ async function refreshMeetings() {
       setMeetingId(button.dataset.loadMeeting);
       await loadReport();
       startPolling();
+    });
+  });
+
+  document.querySelectorAll("[data-retry-meeting]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const meetingId = button.dataset.retryMeeting;
+      const data = await requestJson(`/api/v1/meeting/${encodeURIComponent(meetingId)}/retry`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force: false }),
+      });
+      setMeetingId(data.meeting_id);
+      setProgress({ status: data.status, stage: data.stage, progress: 0, message: `Retry queued, attempt ${data.retry_count}` });
+      showToast("Meeting retry queued");
+      startPolling();
+      await refreshMeetings();
     });
   });
 }

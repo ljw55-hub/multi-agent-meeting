@@ -132,6 +132,16 @@ Check progress:
 curl http://localhost:8000/api/v1/meeting/meeting-001/status
 ```
 
+Retry a failed or completed uploaded-audio meeting:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/meeting/meeting-001/retry \
+  -H "Content-Type: application/json" \
+  -d "{\"force\":false}"
+```
+
+Retry requires the original uploaded audio file to still exist in the Docker `uploads` volume. Meetings created only from the demo flow or an in-memory WebSocket stream cannot be retried through the queue because they do not have a persisted audio file.
+
 Read the final report:
 
 ```bash
