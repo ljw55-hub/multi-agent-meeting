@@ -13,8 +13,10 @@ from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket, WebSo
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
+from ..auth import auth_enabled, require_websocket_api_key
 from ..agents import TranscriptionAgent
 from ..graph import run_meeting_pipeline
+from ..observability import metrics_snapshot
 from ..services.queue import enqueue_meeting_job, queue_depth
 from ..storage.database import (
     get_meeting_metadata,
@@ -194,6 +196,20 @@ async def root() -> dict[str, Any]:
 @router.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@router.get("/api/v1/system/status")
+async def system_status() -> dict[str, Any]:
+    return {
+        "auth_enabled": auth_enabled(),
+        "asr": TranscriptionAgent.runtime_status(),
+        "metrics": metrics_snapshot(),
+    }
+
+
+@router.get("/api/v1/metrics")
+async def get_metrics() -> dict[str, Any]:
+    return metrics_snapshot()
 
 
 @router.get("/api/v1/meetings")
@@ -442,6 +458,8 @@ async def get_section(meeting_id: str, section: str) -> Any:
 
 @router.websocket("/ws/meeting/{meeting_id}")
 async def websocket_meeting(websocket: WebSocket, meeting_id: str) -> None:
+    if not await require_websocket_api_key(websocket):
+        return
     await websocket.accept()
     audio_buffer = bytearray()
     await websocket.send_json({"type": "connected", "meeting_id": meeting_id})
@@ -487,6 +505,8 @@ async def websocket_transcription(websocket: WebSocket, meeting_id: str) -> None
     window when the client sends `flush`, when the buffer reaches the configured
     threshold, or when the client sends `stop`.
     """
+    if not await require_websocket_api_key(websocket):
+        return
     await websocket.accept()
 
     agent = TranscriptionAgent()

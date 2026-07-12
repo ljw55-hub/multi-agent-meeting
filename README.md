@@ -17,6 +17,8 @@ The system uses FastAPI as the service layer, Faster-Whisper for speech transcri
   - Follow-up Agent
 - OpenAI-compatible LLM integration, including SiliconFlow
 - Configurable timeout, retry, fallback, and Agent parallelism
+- Optional API key protection for REST and WebSocket entry points
+- Structured JSON logs and in-process Agent runtime metrics
 - PostgreSQL persistence for meeting metadata, status, and reports
 - Dedicated action item table with editable assignee, task, deadline, priority, context, and status tracking
 - ChromaDB vector storage for meeting memory search
@@ -114,6 +116,9 @@ OPENAI_API_KEY=your-api-key
 Stable development settings:
 
 ```env
+APP_API_KEY=
+LOG_FORMAT=json
+LOG_LEVEL=INFO
 LLM_TIMEOUT_SECONDS=180
 LLM_MAX_RETRIES=2
 LLM_PARALLEL_AGENTS=false
@@ -135,12 +140,22 @@ HF_HUB_DISABLE_XET=1
 WhisperX speaker diarization can be enabled when the optional dependencies and HuggingFace token are available:
 
 ```env
+INSTALL_WHISPERX=true
 ASR_PROVIDER=whisperx
 WHISPERX_MODEL=small
 WHISPERX_DEVICE=cpu
 WHISPERX_COMPUTE_TYPE=int8
 DIARIZATION_ENABLED=true
 HF_TOKEN=your-huggingface-token
+```
+
+When `APP_API_KEY` or `APP_API_KEYS` is configured, protected HTTP endpoints require `X-API-Key: <key>` or `Authorization: Bearer <key>`. Browser WebSocket clients pass the same key through the `api_key` query parameter.
+
+Runtime inspection endpoints:
+
+```bash
+curl http://localhost:8000/api/v1/system/status
+curl http://localhost:8000/api/v1/metrics
 ```
 
 External follow-up integrations are disabled unless configured:

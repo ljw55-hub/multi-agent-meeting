@@ -65,6 +65,46 @@ Expected response:
 {"status": "ok"}
 ```
 
+## Optional API Key Protection
+
+For local learning, `APP_API_KEY` can stay empty. To protect API and WebSocket endpoints, set a key in `.env`:
+
+```env
+APP_API_KEY=change-me
+```
+
+HTTP clients can then call APIs with:
+
+```bash
+curl -H "X-API-Key: change-me" http://localhost:8000/api/v1/meetings
+```
+
+The web console has an API Key field in the System section. The key is stored in browser local storage and sent with API requests. WebSocket recording uses the same key as `?api_key=...`.
+
+## ASR Runtime Status
+
+Check the current ASR provider and WhisperX/pyannote readiness:
+
+```bash
+curl http://localhost:8000/api/v1/system/status
+```
+
+Default local ASR uses Faster-Whisper. To build the optional WhisperX image:
+
+```bash
+INSTALL_WHISPERX=true docker compose up -d --build
+```
+
+Then configure:
+
+```env
+ASR_PROVIDER=whisperx
+DIARIZATION_ENABLED=true
+HF_TOKEN=your-huggingface-token
+```
+
+`HF_TOKEN` is required for pyannote speaker diarization models.
+
 ## Run Demo Flow
 
 ```bash
@@ -108,6 +148,12 @@ List recent meetings:
 
 ```bash
 curl http://localhost:8000/api/v1/meetings
+```
+
+Inspect runtime metrics:
+
+```bash
+curl http://localhost:8000/api/v1/metrics
 ```
 
 List extracted action items:

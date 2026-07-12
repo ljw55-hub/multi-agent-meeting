@@ -6,6 +6,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        INSTALL_WHISPERX: ${INSTALL_WHISPERX:-false}
     container_name: multi-agent-meeting-api
     env_file:
       - .env
@@ -26,6 +28,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        INSTALL_WHISPERX: ${INSTALL_WHISPERX:-false}
     container_name: multi-agent-meeting-worker
     env_file:
       - .env

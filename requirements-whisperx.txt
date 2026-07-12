@@ -1,0 +1,7 @@
+-r requirements.txt
+
+# Optional advanced ASR stack for WhisperX alignment and pyannote speaker diarization.
+# This stack is intentionally separated from the default CPU-friendly install because
+# it downloads large ML dependencies and may require a HuggingFace token.
+whisperx>=3.3.0
+pyannote.audio>=3.3.0

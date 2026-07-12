@@ -261,7 +261,8 @@ label {
 
 .actions-row,
 .search-row,
-.filters-row {
+.filters-row,
+.settings-row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -285,8 +286,13 @@ label {
 
 .search-row input,
 .filters-row input,
-.filters-row select {
+.filters-row select,
+.settings-row label {
   flex: 1 1 260px;
+}
+
+.settings-row button {
+  align-self: end;
 }
 
 .action-row {

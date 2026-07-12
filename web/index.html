@@ -23,6 +23,7 @@
           <a href="#results">Results</a>
           <a href="#action-board">Action Board</a>
           <a href="#search">Memory Search</a>
+          <a href="#system">System</a>
         </nav>
 
         <div class="system-panel">
@@ -191,6 +192,24 @@
             <button id="searchBtn" type="button">Search</button>
           </div>
           <div class="memory-list" id="memoryResults">No search results yet.</div>
+        </section>
+
+        <section class="panel" id="system">
+          <div class="panel-header">
+            <div>
+              <h3>System Status</h3>
+              <p>Check authentication, ASR readiness, and runtime metrics.</p>
+            </div>
+            <button id="refreshSystemBtn" type="button" class="secondary">Refresh Status</button>
+          </div>
+          <div class="settings-row">
+            <label>
+              API Key
+              <input id="apiKeyInput" type="password" placeholder="Only required when APP_API_KEY is enabled" />
+            </label>
+            <button id="saveApiKeyBtn" type="button" class="secondary">Save Key</button>
+          </div>
+          <div class="memory-list" id="systemStatus">No system status loaded yet.</div>
         </section>
       </main>
     </div>

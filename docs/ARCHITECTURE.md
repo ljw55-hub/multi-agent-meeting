@@ -24,6 +24,7 @@ FastAPI provides three entry points:
 - REST API for meeting creation, audio upload, status polling, report reading, and memory search.
 - WebSocket endpoints for audio streaming and staged result push.
 - Redis queue producer for uploaded audio processing jobs.
+- Optional API key guard for protected REST and WebSocket traffic.
 
 Core files:
 
@@ -113,6 +114,15 @@ Core directory:
 src/storage/
 ```
 
+### 7. Observability Layer
+
+The service emits structured JSON logs and keeps lightweight runtime metrics:
+
+- HTTP request duration and status.
+- Pipeline start events.
+- Agent stage duration for Transcription, Summary, Action, Insight, and Follow-up.
+- Recent runtime events exposed through `/api/v1/metrics`.
+
 ## Runtime Flow
 
 1. A user creates a meeting from the web console or REST API.
@@ -134,3 +144,4 @@ The service includes several fallbacks:
 - The graph has a manual async pipeline fallback if LangGraph execution fails.
 - External Jira, Feishu, and SMTP integrations are disabled unless configured.
 - Faster-Whisper is the default CPU-friendly ASR path, while WhisperX remains an optional advanced mode.
+- API key authentication can be enabled by setting `APP_API_KEY` or `APP_API_KEYS`.

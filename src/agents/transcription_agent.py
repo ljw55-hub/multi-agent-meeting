@@ -23,6 +23,30 @@ class TranscriptionAgent:
     _model: Any | None = None
     _model_config: tuple[str, str, str] | None = None
 
+    @staticmethod
+    def runtime_status() -> dict[str, Any]:
+        provider = os.getenv("ASR_PROVIDER", "faster_whisper").lower()
+        whisperx_available = _module_available("whisperx")
+        pyannote_available = _module_available("pyannote.audio")
+        hf_token_configured = bool(os.getenv("HF_TOKEN", "").strip())
+        diarization_enabled = os.getenv("DIARIZATION_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
+        ready = provider == "faster_whisper" or (
+            provider == "whisperx"
+            and whisperx_available
+            and (not diarization_enabled or (pyannote_available and hf_token_configured))
+        )
+        return {
+            "provider": provider,
+            "ready": ready,
+            "faster_whisper_available": _module_available("faster_whisper"),
+            "whisperx_available": whisperx_available,
+            "pyannote_available": pyannote_available,
+            "diarization_enabled": diarization_enabled,
+            "hf_token_configured": hf_token_configured,
+            "model": os.getenv("WHISPERX_MODEL" if provider == "whisperx" else "ASR_MODEL_SIZE", "tiny"),
+            "device": os.getenv("WHISPERX_DEVICE" if provider == "whisperx" else "ASR_DEVICE", "cpu"),
+        }
+
     async def transcribe_bytes(
         self,
         meeting_id: str,
@@ -286,6 +310,15 @@ def _model_reference() -> str:
             _ensure_faster_whisper_tiny(local_dir)
             return str(local_dir)
     return model_size
+
+
+def _module_available(module_name: str) -> bool:
+    import importlib.util
+
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except ModuleNotFoundError:
+        return False
 
 
 def _ensure_faster_whisper_tiny(local_dir: Path) -> None:

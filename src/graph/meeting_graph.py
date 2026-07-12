@@ -9,6 +9,7 @@ from typing import Any, TypedDict
 
 from ..agents import ActionAgent, FollowUpAgent, InsightAgent, SummaryAgent, TranscriptionAgent
 from ..models import create_initial_state
+from ..observability import log_event, stage_timer
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,7 @@ async def run_meeting_pipeline(
     )
 
     try:
+        log_event(logger, "pipeline_started", "meeting pipeline started", meeting_id=meeting_id, stage="pipeline")
         return await _run_with_langgraph(state, progress_callback=progress_callback)
     except Exception as exc:
         logger.warning("LangGraph execution failed, falling back to manual pipeline: %s", exc)
@@ -71,28 +73,33 @@ async def _run_with_langgraph(
 
     async def transcription_node(current: GraphState) -> dict[str, Any]:
         await _emit_progress(progress_callback, "transcription", 10, "正在进行语音转写")
-        result = await transcription.process(dict(current))
+        with stage_timer(str(current.get("meeting_id", "")), "transcription", "TranscriptionAgent"):
+            result = await transcription.process(dict(current))
         await _emit_progress(progress_callback, "transcription", 30, "语音转写完成")
         return _pick_updates(result, "status", "transcript", "transcript_text", "errors")
 
     async def summary_node(current: GraphState) -> dict[str, Any]:
         await _emit_progress(progress_callback, "summary", 45, "正在生成会议摘要")
-        result = await summary.process(dict(current))
+        with stage_timer(str(current.get("meeting_id", "")), "summary", "SummaryAgent"):
+            result = await summary.process(dict(current))
         return _pick_updates(result, "summary")
 
     async def action_node(current: GraphState) -> dict[str, Any]:
         await _emit_progress(progress_callback, "action", 60, "正在提取待办事项")
-        result = await action.process(dict(current))
+        with stage_timer(str(current.get("meeting_id", "")), "action", "ActionAgent"):
+            result = await action.process(dict(current))
         return _pick_updates(result, "actions")
 
     async def insight_node(current: GraphState) -> dict[str, Any]:
         await _emit_progress(progress_callback, "insight", 75, "正在分析会议洞察")
-        result = await insight.process(dict(current))
+        with stage_timer(str(current.get("meeting_id", "")), "insight", "InsightAgent"):
+            result = await insight.process(dict(current))
         return _pick_updates(result, "insights")
 
     async def followup_node(current: GraphState) -> dict[str, Any]:
         await _emit_progress(progress_callback, "followup", 90, "正在生成后续跟进")
-        result = await followup.process(dict(current))
+        with stage_timer(str(current.get("meeting_id", "")), "followup", "FollowUpAgent"):
+            result = await followup.process(dict(current))
         await _emit_progress(progress_callback, "completed", 100, "会议处理完成")
         return _pick_updates(result, "followup", "status", "errors")
 
@@ -131,7 +138,8 @@ async def _run_manually(
     progress_callback: ProgressCallback | None = None,
 ) -> dict[str, Any]:
     await _emit_progress(progress_callback, "transcription", 10, "正在进行语音转写")
-    state = await TranscriptionAgent().process(state)
+    with stage_timer(str(state.get("meeting_id", "")), "transcription", "TranscriptionAgent"):
+        state = await TranscriptionAgent().process(state)
     await _emit_progress(progress_callback, "transcription", 30, "语音转写完成")
 
     if _parallel_agents_enabled():
@@ -181,7 +189,8 @@ async def _run_agent(
     progress_callback: ProgressCallback | None,
 ) -> dict[str, Any]:
     await _emit_progress(progress_callback, stage, progress, message)
-    result = await agent.process(state)
+    with stage_timer(str(state.get("meeting_id", "")), stage, agent.__class__.__name__):
+        result = await agent.process(state)
     return _pick_updates(result, *keys)
 
 

@@ -127,3 +127,13 @@ This document records major engineering changes in the project.
 - Preserved manually managed action item fields when a meeting report is synchronized again.
 - Added inline editing controls to the Action Board in the web console.
 - Verified that edited action item data remains intact after resaving the same meeting result.
+
+## 13. Authentication, ASR Readiness, and Observability
+
+- Added optional API key authentication for `/api/*` endpoints.
+- Added WebSocket API key support through the `api_key` query parameter.
+- Added a System section in the web console for API key storage, ASR status, and runtime metrics.
+- Added `/api/v1/system/status` for authentication state and ASR readiness checks.
+- Added `/api/v1/metrics` for in-process Agent stage timing and recent event inspection.
+- Added structured JSON logging with HTTP and pipeline stage duration events.
+- Added optional `requirements-whisperx.txt` and Docker build arg `INSTALL_WHISPERX` for WhisperX/pyannote deployments.

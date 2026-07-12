@@ -6,6 +6,7 @@ const state = {
   mediaRecorder: null,
   mediaStream: null,
   streamSocket: null,
+  apiKey: window.localStorage.getItem("meetingAssistantApiKey") || "",
 };
 
 const $ = (id) => document.getElementById(id);
@@ -21,13 +22,26 @@ function showToast(message) {
 }
 
 async function requestJson(url, options = {}) {
-  const response = await fetch(url, options);
+  const headers = new Headers(options.headers || {});
+  if (state.apiKey) {
+    headers.set("X-API-Key", state.apiKey);
+  }
+  const response = await fetch(url, { ...options, headers });
   const text = await response.text();
   const data = text ? JSON.parse(text) : {};
   if (!response.ok) {
     throw new Error(data.detail || data.message || `Request failed: ${response.status}`);
   }
   return data;
+}
+
+function websocketUrl(path) {
+  const socketProtocol = window.location.protocol === "https:" ? "wss" : "ws";
+  const url = new URL(`${socketProtocol}://${window.location.host}${path}`);
+  if (state.apiKey) {
+    url.searchParams.set("api_key", state.apiKey);
+  }
+  return url.toString();
 }
 
 function setMeetingId(meetingId) {
@@ -60,6 +74,30 @@ async function checkHealth() {
     $("healthText").textContent = "Service offline";
     $("healthHint").textContent = error.message;
   }
+}
+
+async function refreshSystemStatus() {
+  const data = await requestJson("/api/v1/system/status");
+  const asr = data.asr || {};
+  const metrics = data.metrics || {};
+  const stages = Object.entries(metrics.stages || {})
+    .map(([name, item]) => `<li>${escapeHtml(name)}: ${item.count} runs, avg ${item.avg_ms} ms, max ${item.max_ms} ms</li>`)
+    .join("");
+  $("systemStatus").innerHTML = `
+    <div class="result-item">
+      <strong>Authentication</strong>
+      <div>${data.auth_enabled ? "API key required" : "disabled for local development"}</div>
+    </div>
+    <div class="result-item">
+      <strong>ASR</strong>
+      <div>Provider: ${escapeHtml(asr.provider)} | Ready: ${asr.ready ? "yes" : "no"}</div>
+      <div><small>WhisperX: ${asr.whisperx_available ? "installed" : "missing"} | pyannote: ${asr.pyannote_available ? "installed" : "missing"} | HF token: ${asr.hf_token_configured ? "configured" : "missing"}</small></div>
+      <div><small>Model: ${escapeHtml(asr.model)} | Device: ${escapeHtml(asr.device)} | Diarization: ${asr.diarization_enabled ? "enabled" : "disabled"}</small></div>
+    </div>
+    <div class="result-item">
+      <strong>Agent Metrics</strong>
+      <ul>${stages || "<li>No pipeline metrics yet.</li>"}</ul>
+    </div>`;
 }
 
 async function refreshMeetings() {
@@ -405,8 +443,7 @@ async function searchMemory() {
 async function startStream() {
   const meetingId = await ensureMeeting();
   const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  const socketProtocol = window.location.protocol === "https:" ? "wss" : "ws";
-  const socket = new WebSocket(`${socketProtocol}://${window.location.host}/ws/transcription/${encodeURIComponent(meetingId)}`);
+  const socket = new WebSocket(websocketUrl(`/ws/transcription/${encodeURIComponent(meetingId)}`));
 
   state.mediaStream = mediaStream;
   state.streamSocket = socket;
@@ -506,6 +543,13 @@ function bindEvents() {
     }, 250);
   });
   $("searchBtn").addEventListener("click", () => searchMemory().catch((error) => showToast(error.message)));
+  $("saveApiKeyBtn").addEventListener("click", () => {
+    state.apiKey = $("apiKeyInput").value.trim();
+    window.localStorage.setItem("meetingAssistantApiKey", state.apiKey);
+    showToast("API key saved locally");
+    refreshSystemStatus().catch((error) => showToast(error.message));
+  });
+  $("refreshSystemBtn").addEventListener("click", () => refreshSystemStatus().catch((error) => showToast(error.message)));
   $("startStreamBtn").addEventListener("click", () => startStream().catch((error) => showToast(error.message)));
   $("flushStreamBtn").addEventListener("click", flushStream);
   $("stopStreamBtn").addEventListener("click", stopStream);
@@ -521,6 +565,8 @@ function bindEvents() {
 }
 
 bindEvents();
+$("apiKeyInput").value = state.apiKey;
 checkHealth();
 refreshMeetings().catch(() => {});
 refreshActionItems().catch(() => {});
+refreshSystemStatus().catch(() => {});
