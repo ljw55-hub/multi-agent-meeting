@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Multi-Agent Meeting Assistant</title>
+    <title>多 Agent 智能会议助手</title>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
@@ -12,25 +12,25 @@
         <div class="brand">
           <div class="brand-mark">MA</div>
           <div>
-            <h1>Meeting Assistant</h1>
-            <p>Multi-agent meeting intelligence</p>
+            <h1>会议助手</h1>
+            <p>多 Agent 会议智能分析</p>
           </div>
         </div>
 
         <nav class="nav">
-          <a href="#upload">Audio Upload</a>
-          <a href="#stream">Live Stream</a>
-          <a href="#results">Results</a>
-          <a href="#action-board">Action Board</a>
-          <a href="#search">Memory Search</a>
-          <a href="#system">System</a>
+          <a href="#upload">音频上传</a>
+          <a href="#stream">实时录音</a>
+          <a href="#results">处理结果</a>
+          <a href="#action-board">待办看板</a>
+          <a href="#search">会议记忆</a>
+          <a href="#system">系统状态</a>
         </nav>
 
         <div class="system-panel">
           <span class="status-dot" id="healthDot"></span>
           <div>
-            <strong id="healthText">Checking service</strong>
-            <small id="healthHint">FastAPI backend</small>
+            <strong id="healthText">正在检查服务</strong>
+            <small id="healthHint">FastAPI 后端</small>
           </div>
         </div>
       </aside>
@@ -38,12 +38,12 @@
       <main class="main">
         <section class="topbar">
           <div>
-            <p class="eyebrow">Workspace</p>
-            <h2>Meeting Processing Console</h2>
+            <p class="eyebrow">工作台</p>
+            <h2>会议处理控制台</h2>
           </div>
           <div class="meeting-chip">
-            <span>Meeting ID</span>
-            <strong id="currentMeetingId">Not created</strong>
+            <span>会议 ID</span>
+            <strong id="currentMeetingId">尚未创建</strong>
           </div>
         </section>
 
@@ -51,46 +51,46 @@
           <div class="panel">
             <div class="panel-header">
               <div>
-                <h3>Create Meeting</h3>
-                <p>Set metadata before uploading audio.</p>
+                <h3>创建会议</h3>
+                <p>上传音频前先填写会议基础信息。</p>
               </div>
             </div>
             <label>
-              Title
-              <input id="meetingTitle" type="text" value="Project Sync Meeting" />
+              会议标题
+              <input id="meetingTitle" type="text" value="项目同步会议" />
             </label>
             <label>
-              Participants
-              <input id="participants" type="text" value="alice@example.com,bob@example.com" />
+              参会人
+              <input id="participants" type="text" value="张三,李四" />
             </label>
             <label>
-              Language
+              语言
               <select id="language">
-                <option value="zh">Chinese</option>
-                <option value="en">English</option>
+                <option value="zh">中文</option>
+                <option value="en">英文</option>
               </select>
             </label>
             <div class="actions-row">
-              <button id="createMeetingBtn" type="button">Create</button>
-              <button id="sampleBtn" type="button" class="secondary">Run Sample</button>
+              <button id="createMeetingBtn" type="button">创建会议</button>
+              <button id="sampleBtn" type="button" class="secondary">运行示例</button>
             </div>
           </div>
 
           <div class="panel">
             <div class="panel-header">
               <div>
-                <h3>Upload Audio</h3>
-                <p>Submit a local meeting recording for background processing.</p>
+                <h3>上传音频</h3>
+                <p>上传本地会议录音，后台会异步处理。</p>
               </div>
             </div>
             <label>
-              Audio file
+              音频文件
               <input id="audioFile" type="file" accept="audio/*,.m4a,.mp3,.wav,.flac,.ogg,.webm" />
             </label>
-            <button id="uploadBtn" type="button">Upload And Process</button>
+            <button id="uploadBtn" type="button">上传并处理</button>
             <div class="progress-wrap">
               <div class="progress-meta">
-                <span id="stageText">Idle</span>
+                <span id="stageText">空闲</span>
                 <span id="progressText">0%</span>
               </div>
               <div class="progress-track"><div id="progressBar"></div></div>
@@ -102,114 +102,114 @@
           <div class="panel">
             <div class="panel-header">
               <div>
-                <h3>Live Audio Stream</h3>
-                <p>Record microphone audio through WebSocket chunked transcription.</p>
+                <h3>实时录音</h3>
+                <p>通过 WebSocket 分块上传麦克风音频并转写。</p>
               </div>
             </div>
             <div class="actions-row">
-              <button id="startStreamBtn" type="button">Start Recording</button>
-              <button id="flushStreamBtn" type="button" class="secondary" disabled>Flush Text</button>
-              <button id="stopStreamBtn" type="button" class="danger" disabled>Stop And Analyze</button>
+              <button id="startStreamBtn" type="button">开始录音</button>
+              <button id="flushStreamBtn" type="button" class="secondary" disabled>刷新转写</button>
+              <button id="stopStreamBtn" type="button" class="danger" disabled>停止并分析</button>
             </div>
-            <div class="stream-status" id="streamStatus">Microphone is idle.</div>
+            <div class="stream-status" id="streamStatus">麦克风空闲。</div>
           </div>
 
           <div class="panel">
             <div class="panel-header">
               <div>
-                <h3>Live Transcript</h3>
-                <p>Partial transcript snapshots from the stream endpoint.</p>
+                <h3>实时转写</h3>
+                <p>展示流式接口返回的阶段性转写结果。</p>
               </div>
             </div>
-            <div class="transcript-box" id="liveTranscript">No streaming transcript yet.</div>
+            <div class="transcript-box" id="liveTranscript">暂无实时转写内容。</div>
           </div>
         </section>
 
         <section class="panel" id="results">
           <div class="panel-header">
             <div>
-              <h3>Processing Results</h3>
-              <p>Structured output from the five-agent pipeline.</p>
+              <h3>处理结果</h3>
+              <p>五个 Agent 生成的结构化会议结果。</p>
             </div>
             <div class="actions-row compact">
-              <button id="refreshReportBtn" type="button" class="secondary">Refresh Report</button>
-              <button id="exportReportBtn" type="button" class="secondary">Export Markdown</button>
+              <button id="refreshReportBtn" type="button" class="secondary">刷新报告</button>
+              <button id="exportReportBtn" type="button" class="secondary">导出 Markdown</button>
             </div>
           </div>
 
           <div class="tabs" role="tablist">
-            <button class="tab active" data-tab="transcript">Transcript</button>
-            <button class="tab" data-tab="summary">Summary</button>
-            <button class="tab" data-tab="actions">Actions</button>
-            <button class="tab" data-tab="insights">Insights</button>
-            <button class="tab" data-tab="followup">Follow-up</button>
+            <button class="tab active" data-tab="transcript">转写</button>
+            <button class="tab" data-tab="summary">纪要</button>
+            <button class="tab" data-tab="actions">待办</button>
+            <button class="tab" data-tab="insights">洞察</button>
+            <button class="tab" data-tab="followup">跟进</button>
           </div>
 
-          <div class="result-body" id="resultBody">Create a meeting and process audio to view results.</div>
+          <div class="result-body" id="resultBody">创建会议并处理音频后，在这里查看结果。</div>
         </section>
 
         <section class="panel" id="meetings">
           <div class="panel-header">
             <div>
-              <h3>Recent Meetings</h3>
-              <p>Load previous meetings from PostgreSQL.</p>
+              <h3>最近会议</h3>
+              <p>从 PostgreSQL 加载历史会议。</p>
             </div>
-            <button id="refreshMeetingsBtn" type="button" class="secondary">Refresh List</button>
+            <button id="refreshMeetingsBtn" type="button" class="secondary">刷新列表</button>
           </div>
-          <div class="memory-list" id="meetingList">No meetings loaded yet.</div>
+          <div class="memory-list" id="meetingList">暂无会议列表。</div>
         </section>
 
         <section class="panel" id="action-board">
           <div class="panel-header">
             <div>
-              <h3>Action Board</h3>
-              <p>Track extracted action items independently from meeting reports.</p>
+              <h3>待办看板</h3>
+              <p>独立跟踪和编辑从会议中提取的待办事项。</p>
             </div>
-            <button id="refreshActionsBtn" type="button" class="secondary">Refresh Actions</button>
+            <button id="refreshActionsBtn" type="button" class="secondary">刷新待办</button>
           </div>
           <div class="filters-row">
             <select id="actionStatusFilter">
-              <option value="all">All status</option>
-              <option value="pending">Pending</option>
-              <option value="in_progress">In progress</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
+              <option value="all">全部状态</option>
+              <option value="pending">待处理</option>
+              <option value="in_progress">进行中</option>
+              <option value="completed">已完成</option>
+              <option value="cancelled">已取消</option>
             </select>
-            <input id="actionAssigneeFilter" type="text" placeholder="Filter by assignee" />
+            <input id="actionAssigneeFilter" type="text" placeholder="按负责人筛选" />
           </div>
-          <div class="memory-list" id="actionList">No action items loaded yet.</div>
+          <div class="memory-list" id="actionList">暂无待办事项。</div>
         </section>
 
         <section class="panel" id="search">
           <div class="panel-header">
             <div>
-              <h3>Meeting Memory Search</h3>
-              <p>Query stored meeting memories from ChromaDB.</p>
+              <h3>会议记忆搜索</h3>
+              <p>从 ChromaDB 检索历史会议语义记忆。</p>
             </div>
           </div>
           <div class="search-row">
-            <input id="searchQuery" type="text" value="project follow up action items" />
-            <button id="searchBtn" type="button">Search</button>
+            <input id="searchQuery" type="text" value="项目 跟进 待办事项" />
+            <button id="searchBtn" type="button">搜索</button>
           </div>
-          <div class="memory-list" id="memoryResults">No search results yet.</div>
+          <div class="memory-list" id="memoryResults">暂无搜索结果。</div>
         </section>
 
         <section class="panel" id="system">
           <div class="panel-header">
             <div>
-              <h3>System Status</h3>
-              <p>Check authentication, ASR readiness, and runtime metrics.</p>
+              <h3>系统状态</h3>
+              <p>查看鉴权、ASR 可用性和运行指标。</p>
             </div>
-            <button id="refreshSystemBtn" type="button" class="secondary">Refresh Status</button>
+            <button id="refreshSystemBtn" type="button" class="secondary">刷新状态</button>
           </div>
           <div class="settings-row">
             <label>
               API Key
-              <input id="apiKeyInput" type="password" placeholder="Only required when APP_API_KEY is enabled" />
+              <input id="apiKeyInput" type="password" placeholder="仅在启用 APP_API_KEY 时需要填写" />
             </label>
-            <button id="saveApiKeyBtn" type="button" class="secondary">Save Key</button>
+            <button id="saveApiKeyBtn" type="button" class="secondary">保存 Key</button>
           </div>
-          <div class="memory-list" id="systemStatus">No system status loaded yet.</div>
+          <div class="memory-list" id="systemStatus">暂无系统状态。</div>
         </section>
       </main>
     </div>

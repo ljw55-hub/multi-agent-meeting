@@ -46,14 +46,14 @@ function websocketUrl(path) {
 
 function setMeetingId(meetingId) {
   state.meetingId = meetingId;
-  $("currentMeetingId").textContent = meetingId || "Not created";
+  $("currentMeetingId").textContent = meetingId || "尚未创建";
 }
 
 function setProgress(status) {
   const progress = Number(status.progress || 0);
   $("progressBar").style.width = `${Math.max(0, Math.min(100, progress))}%`;
   $("progressText").textContent = `${progress}%`;
-  $("stageText").textContent = `${status.stage || status.status || "Idle"} - ${status.message || ""}`;
+  $("stageText").textContent = `${status.stage || status.status || "空闲"} - ${status.message || ""}`;
 }
 
 function participantList() {
@@ -67,11 +67,11 @@ async function checkHealth() {
   try {
     await requestJson("/health");
     $("healthDot").className = "status-dot ok";
-    $("healthText").textContent = "Service online";
-    $("healthHint").textContent = "FastAPI backend is healthy";
+    $("healthText").textContent = "服务在线";
+    $("healthHint").textContent = "FastAPI 后端正常";
   } catch (error) {
     $("healthDot").className = "status-dot bad";
-    $("healthText").textContent = "Service offline";
+    $("healthText").textContent = "服务离线";
     $("healthHint").textContent = error.message;
   }
 }
@@ -81,22 +81,22 @@ async function refreshSystemStatus() {
   const asr = data.asr || {};
   const metrics = data.metrics || {};
   const stages = Object.entries(metrics.stages || {})
-    .map(([name, item]) => `<li>${escapeHtml(name)}: ${item.count} runs, avg ${item.avg_ms} ms, max ${item.max_ms} ms</li>`)
+    .map(([name, item]) => `<li>${escapeHtml(stageLabel(name))}：${item.count} 次，平均 ${item.avg_ms} ms，最大 ${item.max_ms} ms</li>`)
     .join("");
   $("systemStatus").innerHTML = `
     <div class="result-item">
-      <strong>Authentication</strong>
-      <div>${data.auth_enabled ? "API key required" : "disabled for local development"}</div>
+      <strong>鉴权</strong>
+      <div>${data.auth_enabled ? "需要 API Key" : "本地开发模式未启用"}</div>
     </div>
     <div class="result-item">
-      <strong>ASR</strong>
-      <div>Provider: ${escapeHtml(asr.provider)} | Ready: ${asr.ready ? "yes" : "no"}</div>
-      <div><small>WhisperX: ${asr.whisperx_available ? "installed" : "missing"} | pyannote: ${asr.pyannote_available ? "installed" : "missing"} | HF token: ${asr.hf_token_configured ? "configured" : "missing"}</small></div>
-      <div><small>Model: ${escapeHtml(asr.model)} | Device: ${escapeHtml(asr.device)} | Diarization: ${asr.diarization_enabled ? "enabled" : "disabled"}</small></div>
+      <strong>语音识别</strong>
+      <div>Provider：${escapeHtml(asr.provider)} | 可用：${asr.ready ? "是" : "否"}</div>
+      <div><small>WhisperX：${asr.whisperx_available ? "已安装" : "未安装"} | pyannote：${asr.pyannote_available ? "已安装" : "未安装"} | HF token：${asr.hf_token_configured ? "已配置" : "未配置"}</small></div>
+      <div><small>模型：${escapeHtml(asr.model)} | 设备：${escapeHtml(asr.device)} | 说话人识别：${asr.diarization_enabled ? "启用" : "关闭"}</small></div>
     </div>
     <div class="result-item">
-      <strong>Agent Metrics</strong>
-      <ul>${stages || "<li>No pipeline metrics yet.</li>"}</ul>
+      <strong>Agent 运行指标</strong>
+      <ul>${stages || "<li>暂无 Pipeline 指标。</li>"}</ul>
     </div>`;
 }
 
@@ -104,7 +104,7 @@ async function refreshMeetings() {
   const data = await requestJson("/api/v1/meetings?limit=20");
   const items = data.items || [];
   if (!items.length) {
-    $("meetingList").textContent = "No meetings found.";
+    $("meetingList").textContent = "暂无会议。";
     return;
   }
   $("meetingList").innerHTML = items
@@ -117,11 +117,11 @@ async function refreshMeetings() {
           <div>
             <strong>${escapeHtml(title)}</strong>
             <div><small>${escapeHtml(item.meeting_id)} | ${escapeHtml(status)} | ${progress}%</small></div>
-            <div><small>${escapeHtml(item.audio_file_name || "no audio file")}</small></div>
+            <div><small>${escapeHtml(item.audio_file_name || "无音频文件")}</small></div>
           </div>
           <div class="row-actions">
-            <button type="button" class="secondary" data-load-meeting="${escapeHtml(item.meeting_id)}">Load</button>
-            <button type="button" class="secondary" data-retry-meeting="${escapeHtml(item.meeting_id)}" ${item.audio_file_name ? "" : "disabled"}>Retry</button>
+            <button type="button" class="secondary" data-load-meeting="${escapeHtml(item.meeting_id)}">加载</button>
+            <button type="button" class="secondary" data-retry-meeting="${escapeHtml(item.meeting_id)}" ${item.audio_file_name ? "" : "disabled"}>重试</button>
           </div>
         </div>`;
     })
@@ -144,8 +144,8 @@ async function refreshMeetings() {
         body: JSON.stringify({ force: false }),
       });
       setMeetingId(data.meeting_id);
-      setProgress({ status: data.status, stage: data.stage, progress: 0, message: `Retry queued, attempt ${data.retry_count}` });
-      showToast("Meeting retry queued");
+      setProgress({ status: data.status, stage: data.stage, progress: 0, message: `已重新入队，第 ${data.retry_count} 次尝试` });
+      showToast("会议已重新入队");
       startPolling();
       await refreshMeetings();
     });
@@ -167,7 +167,7 @@ async function refreshActionItems() {
   const data = await requestJson(`/api/v1/action-items?${params.toString()}`);
   const items = data.items || [];
   if (!items.length) {
-    $("actionList").textContent = "No action items found.";
+    $("actionList").textContent = "暂无待办事项。";
     return;
   }
 
@@ -177,37 +177,37 @@ async function refreshActionItems() {
         <div class="result-item action-row" data-action-id="${escapeHtml(item.item_id)}">
           <div class="action-fields">
             <label>
-              Assignee
+              负责人
               <input data-action-field="assignee" value="${escapeHtml(item.assignee || "")}" />
             </label>
             <label>
-              Task
+              任务
               <textarea data-action-field="task">${escapeHtml(item.task)}</textarea>
             </label>
             <label>
-              Deadline
+              截止时间
               <input data-action-field="deadline" value="${escapeHtml(item.deadline || "")}" />
             </label>
             <label>
-              Context
+              上下文
               <input data-action-field="context" value="${escapeHtml(item.context || "")}" />
             </label>
             <div><small>${escapeHtml(item.meeting_id)} | ${escapeHtml(item.item_id)}</small></div>
           </div>
           <div class="action-controls">
             <select data-action-field="priority">
-              <option value="low" ${item.priority === "low" ? "selected" : ""}>Low</option>
-              <option value="medium" ${item.priority === "medium" ? "selected" : ""}>Medium</option>
-              <option value="high" ${item.priority === "high" ? "selected" : ""}>High</option>
-              <option value="urgent" ${item.priority === "urgent" ? "selected" : ""}>Urgent</option>
+              <option value="low" ${item.priority === "low" ? "selected" : ""}>低</option>
+              <option value="medium" ${item.priority === "medium" ? "selected" : ""}>中</option>
+              <option value="high" ${item.priority === "high" ? "selected" : ""}>高</option>
+              <option value="urgent" ${item.priority === "urgent" ? "selected" : ""}>紧急</option>
             </select>
             <select data-action-field="status">
-              <option value="pending" ${item.status === "pending" ? "selected" : ""}>Pending</option>
-              <option value="in_progress" ${item.status === "in_progress" ? "selected" : ""}>In progress</option>
-              <option value="completed" ${item.status === "completed" ? "selected" : ""}>Completed</option>
-              <option value="cancelled" ${item.status === "cancelled" ? "selected" : ""}>Cancelled</option>
+              <option value="pending" ${item.status === "pending" ? "selected" : ""}>待处理</option>
+              <option value="in_progress" ${item.status === "in_progress" ? "selected" : ""}>进行中</option>
+              <option value="completed" ${item.status === "completed" ? "selected" : ""}>已完成</option>
+              <option value="cancelled" ${item.status === "cancelled" ? "selected" : ""}>已取消</option>
             </select>
-            <button type="button" class="secondary" data-save-action="${escapeHtml(item.item_id)}">Save</button>
+            <button type="button" class="secondary" data-save-action="${escapeHtml(item.item_id)}">保存</button>
           </div>
         </div>`
     )
@@ -225,7 +225,7 @@ async function refreshActionItems() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      showToast("Action item updated");
+      showToast("待办事项已更新");
       await refreshActionItems();
     });
   });
@@ -243,8 +243,8 @@ async function createMeeting() {
     body: JSON.stringify(payload),
   });
   setMeetingId(data.meeting_id);
-  setProgress({ status: "created", stage: "created", progress: 0, message: "Meeting created" });
-  showToast("Meeting created");
+  setProgress({ status: "created", stage: "created", progress: 0, message: "会议已创建" });
+  showToast("会议已创建");
 }
 
 async function ensureMeeting() {
@@ -257,7 +257,7 @@ async function ensureMeeting() {
 async function uploadAudio() {
   const file = $("audioFile").files[0];
   if (!file) {
-    showToast("Choose an audio file first");
+    showToast("请先选择音频文件");
     return;
   }
   const meetingId = await ensureMeeting();
@@ -268,20 +268,20 @@ async function uploadAudio() {
     method: "POST",
     body: form,
   });
-  showToast("Audio uploaded. Processing started.");
+  showToast("音频已上传，开始后台处理");
   startPolling();
 }
 
 async function runSample() {
   const meetingId = await ensureMeeting();
-  setProgress({ status: "processing", stage: "sample", progress: 1, message: "Running sample pipeline" });
+  setProgress({ status: "processing", stage: "sample", progress: 1, message: "正在运行示例 Pipeline" });
   const data = await requestJson(`/api/v1/meeting/${encodeURIComponent(meetingId)}/demo`, {
     method: "POST",
   });
   state.report = data;
-  setProgress({ status: "completed", stage: "completed", progress: 100, message: "Sample completed" });
+  setProgress({ status: "completed", stage: "completed", progress: 100, message: "示例运行完成" });
   renderActiveTab();
-  showToast("Sample pipeline completed");
+  showToast("示例 Pipeline 已完成");
 }
 
 function startPolling() {
@@ -304,7 +304,7 @@ async function pollStatus() {
     }
     if (status.status === "failed") {
       window.clearInterval(state.pollTimer);
-      showToast(`Processing failed: ${(status.errors || []).join("; ")}`);
+      showToast(`处理失败：${(status.errors || []).join("; ")}`);
     }
   } catch (error) {
     showToast(error.message);
@@ -313,7 +313,7 @@ async function pollStatus() {
 
 async function loadReport() {
   if (!state.meetingId) {
-    showToast("Create or select a meeting first");
+    showToast("请先创建或选择会议");
     return;
   }
   state.report = await requestJson(`/api/v1/meeting/${encodeURIComponent(state.meetingId)}/report`);
@@ -322,7 +322,7 @@ async function loadReport() {
 
 function exportMarkdown() {
   if (!state.meetingId) {
-    showToast("Create or load a meeting first");
+    showToast("请先创建或加载会议");
     return;
   }
   window.open(`/api/v1/meeting/${encodeURIComponent(state.meetingId)}/export.md`, "_blank");
@@ -330,7 +330,7 @@ function exportMarkdown() {
 
 function renderActiveTab() {
   if (!state.report) {
-    $("resultBody").textContent = "No report loaded yet.";
+    $("resultBody").textContent = "暂无会议报告。";
     return;
   }
   const value = state.report[state.activeTab];
@@ -352,10 +352,31 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
+function stageLabel(value) {
+  return {
+    transcription: "语音转写",
+    summary: "会议纪要",
+    action: "待办提取",
+    insight: "会议洞察",
+    followup: "跟进处理",
+    http: "HTTP 请求",
+    pipeline: "Pipeline",
+  }[value] || value;
+}
+
+function priorityLabel(value) {
+  return {
+    low: "低",
+    medium: "中",
+    high: "高",
+    urgent: "紧急",
+  }[value] || value || "中";
+}
+
 function renderTranscript(transcript) {
   const segments = transcript?.segments || [];
   if (!segments.length) {
-    return "No transcript segments.";
+    return "暂无转写片段。";
   }
   return segments
     .map(
@@ -371,7 +392,7 @@ function renderTranscript(transcript) {
 
 function renderSummary(summary) {
   if (!summary) {
-    return "No summary generated.";
+    return "暂无会议纪要。";
   }
   const topics = (summary.topics || [])
     .map((topic) => {
@@ -383,16 +404,16 @@ function renderSummary(summary) {
   const nextSteps = (summary.next_steps || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
   return `
     <strong>${escapeHtml(summary.title)}</strong>
-    <p>Participants: ${escapeHtml((summary.participants || []).join(", "))}</p>
+    <p>参会人：${escapeHtml((summary.participants || []).join(", "))}</p>
     ${topics}
-    <h4>Decisions</h4><ul>${decisions}</ul>
-    <h4>Next Steps</h4><ul>${nextSteps}</ul>`;
+    <h4>决策</h4><ul>${decisions}</ul>
+    <h4>下一步</h4><ul>${nextSteps}</ul>`;
 }
 
 function renderActions(actions) {
   const items = actions?.action_items || [];
   if (!items.length) {
-    return "No action items generated.";
+    return "暂无待办事项。";
   }
   return items
     .map(
@@ -400,8 +421,8 @@ function renderActions(actions) {
         <div class="result-item">
           <strong>${escapeHtml(item.assignee)}</strong>
           <div>${escapeHtml(item.task)}</div>
-          <small>Deadline: ${escapeHtml(item.deadline || "N/A")} | Priority: ${escapeHtml(item.priority)}</small>
-          <div><small>Jira: ${escapeHtml(item.jira_issue_key || "-")} | Feishu: ${escapeHtml(item.feishu_task_id || "-")}</small></div>
+          <small>截止时间：${escapeHtml(item.deadline || "无")} | 优先级：${escapeHtml(priorityLabel(item.priority))}</small>
+          <div><small>Jira：${escapeHtml(item.jira_issue_key || "-")} | 飞书：${escapeHtml(item.feishu_task_id || "-")}</small></div>
         </div>`
     )
     .join("");
@@ -409,32 +430,32 @@ function renderActions(actions) {
 
 function renderInsights(insights) {
   if (!insights) {
-    return "No insights generated.";
+    return "暂无会议洞察。";
   }
   const speakers = (insights.speaker_stats || [])
-    .map((stat) => `<li>${escapeHtml(stat.speaker)}: ${Number(stat.percentage || 0).toFixed(1)}%</li>`)
+    .map((stat) => `<li>${escapeHtml(stat.speaker)}：${Number(stat.percentage || 0).toFixed(1)}%</li>`)
     .join("");
   const highlights = (insights.highlights || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
   const suggestions = (insights.suggestions || []).map((item) => `<li>${escapeHtml(item)}</li>`).join("");
   return `
-    <p>Sentiment: <strong>${escapeHtml(insights.overall_sentiment)}</strong> (${Number(insights.sentiment_score || 0).toFixed(2)})</p>
-    <p>Efficiency score: <strong>${Number(insights.efficiency_score || 0).toFixed(1)}</strong>/10</p>
-    <p>Keywords: ${escapeHtml((insights.keywords || []).join(", "))}</p>
-    <h4>Speaker Stats</h4><ul>${speakers}</ul>
-    <h4>Highlights</h4><ul>${highlights}</ul>
-    <h4>Suggestions</h4><ul>${suggestions}</ul>`;
+    <p>情绪：<strong>${escapeHtml(insights.overall_sentiment)}</strong> (${Number(insights.sentiment_score || 0).toFixed(2)})</p>
+    <p>效率评分：<strong>${Number(insights.efficiency_score || 0).toFixed(1)}</strong>/10</p>
+    <p>关键词：${escapeHtml((insights.keywords || []).join(", "))}</p>
+    <h4>发言统计</h4><ul>${speakers}</ul>
+    <h4>亮点</h4><ul>${highlights}</ul>
+    <h4>建议</h4><ul>${suggestions}</ul>`;
 }
 
 function renderFollowup(followup) {
   if (!followup) {
-    return "No follow-up result generated.";
+    return "暂无跟进结果。";
   }
   return `
-    <p>Report URL: ${escapeHtml(followup.report_url || "-")}</p>
-    <p>Summary sent: ${followup.summary_sent ? "yes" : "no"}</p>
-    <p>Vector stored: ${followup.stored_in_vector_db ? "yes" : "no"}</p>
-    <p>Jira issues: ${escapeHtml((followup.jira_issues_created || []).join(", ") || "-")}</p>
-    <p>Feishu tasks: ${escapeHtml((followup.feishu_tasks_created || []).join(", ") || "-")}</p>`;
+    <p>报告地址：${escapeHtml(followup.report_url || "-")}</p>
+    <p>纪要已发送：${followup.summary_sent ? "是" : "否"}</p>
+    <p>已写入向量库：${followup.stored_in_vector_db ? "是" : "否"}</p>
+    <p>Jira 事项：${escapeHtml((followup.jira_issues_created || []).join(", ") || "-")}</p>
+    <p>飞书任务：${escapeHtml((followup.feishu_tasks_created || []).join(", ") || "-")}</p>`;
 }
 
 async function searchMemory() {
@@ -445,14 +466,14 @@ async function searchMemory() {
   const data = await requestJson(`/api/v1/meeting/search?query=${encodeURIComponent(query)}&limit=5`);
   const results = data.results || [];
   if (!results.length) {
-    $("memoryResults").textContent = "No matching meeting memory.";
+    $("memoryResults").textContent = "没有匹配的会议记忆。";
     return;
   }
   $("memoryResults").innerHTML = results
     .map(
       (item) => `
         <div class="result-item">
-          <strong>${escapeHtml(item.meeting_id || item.id || "meeting")}</strong>
+          <strong>${escapeHtml(item.meeting_id || item.id || "会议")}</strong>
           <div>${escapeHtml(item.document || item.text || JSON.stringify(item))}</div>
         </div>`
     )
@@ -483,7 +504,7 @@ async function startStream() {
       }
     });
     recorder.start(2500);
-    $("streamStatus").textContent = "Recording through WebSocket.";
+    $("streamStatus").textContent = "正在通过 WebSocket 录音。";
     $("startStreamBtn").disabled = true;
     $("flushStreamBtn").disabled = false;
     $("stopStreamBtn").disabled = false;
@@ -504,10 +525,10 @@ async function startStream() {
 
 function handleStreamMessage(data) {
   if (data.type === "buffered") {
-    $("streamStatus").textContent = `Buffered ${data.buffer_size} bytes.`;
+    $("streamStatus").textContent = `已缓存 ${data.buffer_size} 字节。`;
   }
   if (data.type === "partial_transcript" || data.type === "final_transcript") {
-    const text = data.transcript?.full_text || "No text recognized yet.";
+    const text = data.transcript?.full_text || "暂未识别到文本。";
     $("liveTranscript").textContent = text;
   }
   if (["transcript", "summary", "actions", "insights", "followup"].includes(data.type)) {
@@ -516,11 +537,11 @@ function handleStreamMessage(data) {
     renderActiveTab();
   }
   if (data.type === "completed") {
-    $("streamStatus").textContent = "Stream analysis completed.";
+    $("streamStatus").textContent = "实时音频分析完成。";
     loadReport().catch(() => {});
   }
   if (data.type === "error") {
-    showToast(data.message || "Stream error");
+    showToast(data.message || "实时录音出错");
   }
 }
 
@@ -565,7 +586,7 @@ function bindEvents() {
   $("saveApiKeyBtn").addEventListener("click", () => {
     state.apiKey = $("apiKeyInput").value.trim();
     window.localStorage.setItem("meetingAssistantApiKey", state.apiKey);
-    showToast("API key saved locally");
+    showToast("API Key 已保存到本地浏览器");
     refreshSystemStatus().catch((error) => showToast(error.message));
   });
   $("refreshSystemBtn").addEventListener("click", () => refreshSystemStatus().catch((error) => showToast(error.message)));
