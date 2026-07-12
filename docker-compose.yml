@@ -14,6 +14,26 @@ services:
     volumes:
       - ./src:/app/src
       - asr_models:/app/models
+      - uploads:/app/uploads
+    depends_on:
+      - postgres
+      - redis
+      - chromadb
+    restart: unless-stopped
+
+  worker:
+    image: multi-agent-meeting-api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: multi-agent-meeting-worker
+    env_file:
+      - .env
+    command: ["python", "-m", "src.worker"]
+    volumes:
+      - ./src:/app/src
+      - asr_models:/app/models
+      - uploads:/app/uploads
     depends_on:
       - postgres
       - redis
@@ -60,3 +80,5 @@ volumes:
     name: multi-agent-meeting_chroma_data
   asr_models:
     name: multi-agent-meeting_asr_models
+  uploads:
+    name: multi-agent-meeting_uploads

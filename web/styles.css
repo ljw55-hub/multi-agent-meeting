@@ -260,6 +260,21 @@ label {
   margin-top: 16px;
 }
 
+.actions-row.compact {
+  margin-top: 0;
+}
+
+.meeting-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.meeting-row button {
+  min-height: 34px;
+}
+
 .search-row input {
   flex: 1 1 260px;
 }

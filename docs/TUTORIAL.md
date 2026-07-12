@@ -26,6 +26,7 @@ docker compose up -d --build
 The compose stack starts:
 
 - `multi-agent-meeting-api`: FastAPI backend
+- `multi-agent-meeting-worker`: Redis queue worker for audio processing
 - `multi-agent-meeting-postgres`: PostgreSQL database
 - `multi-agent-meeting-redis`: Redis service
 - `multi-agent-meeting-chromadb`: ChromaDB vector database
@@ -95,6 +96,18 @@ Read the final report:
 
 ```bash
 curl http://localhost:8000/api/v1/meeting/meeting-001/report
+```
+
+Export the final report as Markdown:
+
+```bash
+curl http://localhost:8000/api/v1/meeting/meeting-001/export.md
+```
+
+List recent meetings:
+
+```bash
+curl http://localhost:8000/api/v1/meetings
 ```
 
 ## Stream Audio

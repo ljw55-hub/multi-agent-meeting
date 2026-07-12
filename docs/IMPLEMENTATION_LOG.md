@@ -103,3 +103,12 @@ This document records major engineering changes in the project.
 - Added static frontend assets under `web/`.
 - Added meeting creation, audio upload, progress polling, report rendering, microphone streaming, and memory search controls.
 - Added Docker packaging for frontend assets.
+
+## 10. Background Worker and Meeting Management
+
+- Replaced upload-time `BackgroundTasks` processing with Redis-backed job queueing.
+- Added dedicated `worker` service in Docker Compose.
+- Added shared upload volume for API and worker containers.
+- Added `/api/v1/meetings` for recent meeting listing.
+- Added `/api/v1/meeting/{meeting_id}/export.md` for Markdown report export.
+- Added recent-meetings and Markdown export controls to the web console.

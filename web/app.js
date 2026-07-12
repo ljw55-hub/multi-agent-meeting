@@ -62,6 +62,39 @@ async function checkHealth() {
   }
 }
 
+async function refreshMeetings() {
+  const data = await requestJson("/api/v1/meetings?limit=20");
+  const items = data.items || [];
+  if (!items.length) {
+    $("meetingList").textContent = "No meetings found.";
+    return;
+  }
+  $("meetingList").innerHTML = items
+    .map((item) => {
+      const status = item.status?.status || "created";
+      const progress = item.status?.progress ?? 0;
+      const title = item.title || item.meeting_id;
+      return `
+        <div class="result-item meeting-row">
+          <div>
+            <strong>${escapeHtml(title)}</strong>
+            <div><small>${escapeHtml(item.meeting_id)} | ${escapeHtml(status)} | ${progress}%</small></div>
+            <div><small>${escapeHtml(item.audio_file_name || "no audio file")}</small></div>
+          </div>
+          <button type="button" class="secondary" data-load-meeting="${escapeHtml(item.meeting_id)}">Load</button>
+        </div>`;
+    })
+    .join("");
+
+  document.querySelectorAll("[data-load-meeting]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      setMeetingId(button.dataset.loadMeeting);
+      await loadReport();
+      startPolling();
+    });
+  });
+}
+
 async function createMeeting() {
   const payload = {
     title: $("meetingTitle").value.trim(),
@@ -148,6 +181,14 @@ async function loadReport() {
   }
   state.report = await requestJson(`/api/v1/meeting/${encodeURIComponent(state.meetingId)}/report`);
   renderActiveTab();
+}
+
+function exportMarkdown() {
+  if (!state.meetingId) {
+    showToast("Create or load a meeting first");
+    return;
+  }
+  window.open(`/api/v1/meeting/${encodeURIComponent(state.meetingId)}/export.md`, "_blank");
 }
 
 function renderActiveTab() {
@@ -374,6 +415,8 @@ function bindEvents() {
   $("uploadBtn").addEventListener("click", () => uploadAudio().catch((error) => showToast(error.message)));
   $("sampleBtn").addEventListener("click", () => runSample().catch((error) => showToast(error.message)));
   $("refreshReportBtn").addEventListener("click", () => loadReport().catch((error) => showToast(error.message)));
+  $("exportReportBtn").addEventListener("click", exportMarkdown);
+  $("refreshMeetingsBtn").addEventListener("click", () => refreshMeetings().catch((error) => showToast(error.message)));
   $("searchBtn").addEventListener("click", () => searchMemory().catch((error) => showToast(error.message)));
   $("startStreamBtn").addEventListener("click", () => startStream().catch((error) => showToast(error.message)));
   $("flushStreamBtn").addEventListener("click", flushStream);
@@ -391,3 +434,4 @@ function bindEvents() {
 
 bindEvents();
 checkHealth();
+refreshMeetings().catch(() => {});

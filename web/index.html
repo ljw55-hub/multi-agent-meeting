@@ -129,7 +129,10 @@
               <h3>Processing Results</h3>
               <p>Structured output from the five-agent pipeline.</p>
             </div>
-            <button id="refreshReportBtn" type="button" class="secondary">Refresh Report</button>
+            <div class="actions-row compact">
+              <button id="refreshReportBtn" type="button" class="secondary">Refresh Report</button>
+              <button id="exportReportBtn" type="button" class="secondary">Export Markdown</button>
+            </div>
           </div>
 
           <div class="tabs" role="tablist">
@@ -141,6 +144,17 @@
           </div>
 
           <div class="result-body" id="resultBody">Create a meeting and process audio to view results.</div>
+        </section>
+
+        <section class="panel" id="meetings">
+          <div class="panel-header">
+            <div>
+              <h3>Recent Meetings</h3>
+              <p>Load previous meetings from PostgreSQL.</p>
+            </div>
+            <button id="refreshMeetingsBtn" type="button" class="secondary">Refresh List</button>
+          </div>
+          <div class="memory-list" id="meetingList">No meetings loaded yet.</div>
         </section>
 
         <section class="panel" id="search">

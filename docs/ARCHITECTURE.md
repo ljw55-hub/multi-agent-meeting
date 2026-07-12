@@ -23,6 +23,7 @@ FastAPI provides three entry points:
 - Web console at `/ui` for browser-based operation.
 - REST API for meeting creation, audio upload, status polling, report reading, and memory search.
 - WebSocket endpoints for audio streaming and staged result push.
+- Redis queue producer for uploaded audio processing jobs.
 
 Core files:
 
@@ -103,7 +104,7 @@ Persistent storage is split by responsibility:
 
 - PostgreSQL stores meeting metadata, processing status, and final reports.
 - ChromaDB stores vectorized meeting memories for semantic search.
-- Redis is included for future task queue, cache, or WebSocket session coordination.
+- Redis stores background meeting jobs consumed by the worker service.
 
 Core directory:
 
@@ -114,12 +115,14 @@ src/storage/
 ## Runtime Flow
 
 1. A user creates a meeting from the web console or REST API.
-2. The user uploads an audio file or sends audio chunks through WebSocket.
-3. Transcription Agent converts audio into structured transcript segments.
-4. Summary, Action, and Insight Agents process the transcript.
-5. Follow-up Agent creates the report and optional external follow-up artifacts.
-6. The final report is stored in PostgreSQL and meeting memory is stored in ChromaDB.
-7. The user reads the report through the web console or API.
+2. For uploaded audio, the API stores the file and enqueues a Redis job.
+3. The worker consumes the job and runs the meeting pipeline.
+4. For WebSocket audio, the API can still run the stream pipeline directly.
+5. Transcription Agent converts audio into structured transcript segments.
+6. Summary, Action, and Insight Agents process the transcript.
+7. Follow-up Agent creates the report and optional external follow-up artifacts.
+8. The final report is stored in PostgreSQL and meeting memory is stored in ChromaDB.
+9. The user reads the report through the web console or API.
 
 ## Fault Tolerance
 

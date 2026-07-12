@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import JSON, Column, DateTime, Integer, MetaData, String, Table, Text, create_engine, select
+from sqlalchemy import JSON, Column, DateTime, Integer, MetaData, String, Table, Text, create_engine, desc, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Engine
 
@@ -86,6 +86,13 @@ def get_meeting_metadata(meeting_id: str) -> dict[str, Any] | None:
     with get_engine().begin() as conn:
         row = conn.execute(select(meetings).where(meetings.c.meeting_id == meeting_id)).mappings().first()
     return _row_to_dict(row)
+
+
+def list_meeting_metadata(limit: int = 20, offset: int = 0) -> list[dict[str, Any]]:
+    stmt = select(meetings).order_by(desc(meetings.c.updated_at)).limit(limit).offset(offset)
+    with get_engine().begin() as conn:
+        rows = conn.execute(stmt).mappings().all()
+    return [_row_to_dict(row) or {} for row in rows]
 
 
 def save_meeting_status(

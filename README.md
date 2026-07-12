@@ -19,6 +19,7 @@ The system uses FastAPI as the service layer, Faster-Whisper for speech transcri
 - Configurable timeout, retry, fallback, and Agent parallelism
 - PostgreSQL persistence for meeting metadata, status, and reports
 - ChromaDB vector storage for meeting memory search
+- Redis-backed background worker for audio processing jobs
 - REST API, full-result WebSocket, and chunked transcription WebSocket entry points
 - Optional Jira, Feishu, and SMTP follow-up integrations
 - Docker Compose based local deployment

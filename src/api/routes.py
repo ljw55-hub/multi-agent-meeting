@@ -2,20 +2,25 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
 from ..agents import TranscriptionAgent
 from ..graph import run_meeting_pipeline
+from ..services.queue import enqueue_meeting_job, queue_depth
 from ..storage.database import (
     get_meeting_metadata,
     get_meeting_result,
     get_meeting_status,
+    list_meeting_metadata,
     save_meeting_result,
     save_meeting_status,
     upsert_meeting_metadata,
@@ -29,6 +34,7 @@ logger = logging.getLogger(__name__)
 meeting_results: dict[str, dict[str, Any]] = {}
 meeting_metadata: dict[str, dict[str, Any]] = {}
 meeting_statuses: dict[str, dict[str, Any]] = {}
+UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "/app/uploads"))
 
 
 class MeetingStartRequest(BaseModel):
@@ -96,7 +102,7 @@ def _persist_completed_result(meeting_id: str, result: dict[str, Any]) -> dict[s
 
 
 def _load_result(meeting_id: str) -> dict[str, Any] | None:
-    return meeting_results.get(meeting_id) or get_meeting_result(meeting_id)
+    return get_meeting_result(meeting_id) or meeting_results.get(meeting_id)
 
 
 def _load_metadata(meeting_id: str) -> dict[str, Any]:
@@ -177,6 +183,31 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@router.get("/api/v1/meetings")
+async def list_meetings(limit: int = 20, offset: int = 0) -> dict[str, Any]:
+    limit = max(1, min(100, limit))
+    offset = max(0, offset)
+    items = []
+    for meta in list_meeting_metadata(limit=limit, offset=offset):
+        meeting_id = meta["meeting_id"]
+        status = get_meeting_status(meeting_id) or meeting_statuses.get(meeting_id)
+        result = _load_result(meeting_id)
+        items.append(
+            {
+                "meeting_id": meeting_id,
+                "title": meta.get("title", ""),
+                "participants": meta.get("participants", []),
+                "language": meta.get("language", "zh"),
+                "audio_file_name": meta.get("audio_file_name", ""),
+                "created_at": meta.get("created_at"),
+                "updated_at": meta.get("updated_at"),
+                "status": status or {},
+                "has_report": bool(result),
+            }
+        )
+    return {"items": items, "limit": limit, "offset": offset}
+
+
 @router.post("/api/v1/meeting/start", status_code=201)
 async def start_meeting(request: MeetingStartRequest) -> dict[str, Any]:
     if request.language not in {"zh", "en"}:
@@ -255,26 +286,40 @@ async def _process_upload(meeting_id: str, audio_data: bytes, language: str = "z
 @router.post("/api/v1/meeting/{meeting_id}/upload", status_code=202)
 async def upload_audio(
     meeting_id: str,
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     language: str = "zh",
 ) -> dict[str, Any]:
     audio_data = await file.read()
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    safe_name = Path(file.filename or "meeting-audio.bin").name
+    stored_name = f"{meeting_id}-{uuid.uuid4().hex[:8]}-{safe_name}"
+    audio_path = UPLOAD_DIR / stored_name
+    audio_path.write_bytes(audio_data)
     metadata = upsert_meeting_metadata(
         meeting_id,
         {
             "audio_file_name": file.filename or "",
             "language": language,
+            "extra": {"audio_path": str(audio_path)},
         },
     )
     meeting_metadata[meeting_id] = metadata
-    _set_meeting_status(meeting_id, "processing", "uploaded", 0, "Audio uploaded")
-    background_tasks.add_task(_process_upload, meeting_id, audio_data, language)
+    _set_meeting_status(meeting_id, "queued", "queued", 0, "Audio uploaded and queued")
+    depth = enqueue_meeting_job(
+        {
+            "type": "audio_file",
+            "meeting_id": meeting_id,
+            "audio_path": str(audio_path),
+            "language": language,
+            "file_name": file.filename or "",
+        }
+    )
     return {
         "meeting_id": meeting_id,
-        "status": "processing",
+        "status": "queued",
         "file_name": file.filename,
         "file_size_bytes": len(audio_data),
+        "queue_depth": depth,
     }
 
 
@@ -294,9 +339,17 @@ async def get_report(meeting_id: str) -> dict[str, Any]:
     return result
 
 
+@router.get("/api/v1/meeting/{meeting_id}/export.md", response_class=PlainTextResponse)
+async def export_report_markdown(meeting_id: str) -> str:
+    result = _load_result(meeting_id)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"meeting not found: {meeting_id}")
+    return _report_markdown(result)
+
+
 @router.get("/api/v1/meeting/{meeting_id}/status")
 async def get_status(meeting_id: str) -> dict[str, Any]:
-    status = meeting_statuses.get(meeting_id) or get_meeting_status(meeting_id)
+    status = get_meeting_status(meeting_id) or meeting_statuses.get(meeting_id)
     if status:
         return status
 
@@ -527,3 +580,63 @@ async def websocket_transcription(websocket: WebSocket, meeting_id: str) -> None
         logger.exception("Streaming transcription failed: meeting_id=%s", meeting_id)
         _set_meeting_status(meeting_id, "failed", "streaming_failed", 0, "Streaming transcription failed", [str(exc)])
         await websocket.send_json({"type": "error", "message": str(exc)})
+
+
+def _report_markdown(result: dict[str, Any]) -> str:
+    meeting_id = result.get("meeting_id", "")
+    summary = result.get("summary") or {}
+    transcript = result.get("transcript") or {}
+    actions = result.get("actions") or {}
+    insights = result.get("insights") or {}
+    followup = result.get("followup") or {}
+
+    lines = [
+        f"# Meeting Report - {meeting_id}",
+        "",
+        f"Status: {result.get('status', 'completed')}",
+        "",
+        "## Summary",
+        "",
+        f"### {summary.get('title', 'Meeting Summary')}",
+        "",
+    ]
+    for topic in summary.get("topics", []):
+        lines.extend([f"#### {topic.get('title', 'Topic')}", ""])
+        lines.extend(f"- {point}" for point in topic.get("discussion_points", []))
+        if topic.get("conclusion"):
+            lines.append(f"- Conclusion: {topic['conclusion']}")
+        lines.append("")
+    if summary.get("decisions"):
+        lines.extend(["## Decisions", ""])
+        lines.extend(f"- {item}" for item in summary["decisions"])
+        lines.append("")
+
+    lines.extend(["## Action Items", ""])
+    for item in actions.get("action_items", []):
+        lines.append(
+            f"- [{item.get('priority', 'medium')}] {item.get('assignee', 'Unassigned')}: "
+            f"{item.get('task', '')} | deadline: {item.get('deadline', 'N/A')}"
+        )
+    lines.append("")
+
+    lines.extend(["## Insights", ""])
+    lines.append(f"- Sentiment: {insights.get('overall_sentiment', 'neutral')} ({insights.get('sentiment_score', 0.5)})")
+    lines.append(f"- Efficiency score: {insights.get('efficiency_score', 0)}/10")
+    if insights.get("keywords"):
+        lines.append(f"- Keywords: {', '.join(insights['keywords'])}")
+    for stat in insights.get("speaker_stats", []):
+        lines.append(f"- {stat.get('speaker')}: {stat.get('percentage', 0)}%")
+    lines.append("")
+
+    lines.extend(["## Transcript", ""])
+    for segment in transcript.get("segments", []):
+        lines.append(
+            f"- {segment.get('start', 0):.1f}s-{segment.get('end', 0):.1f}s "
+            f"{segment.get('speaker', 'Speaker')}: {segment.get('text', '')}"
+        )
+    lines.append("")
+
+    lines.extend(["## Follow-up", ""])
+    lines.append(f"- Report URL: {followup.get('report_url', '')}")
+    lines.append(f"- Stored in vector DB: {followup.get('stored_in_vector_db', False)}")
+    return "\n".join(lines)
