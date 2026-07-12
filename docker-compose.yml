@@ -1,15 +1,19 @@
+name: multi-agent-meeting
+
 services:
   api:
+    image: multi-agent-meeting-api:latest
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: multi-agent-hy-api
+    container_name: multi-agent-meeting-api
     env_file:
       - .env
     ports:
       - "8000:8000"
     volumes:
       - ./src:/app/src
+      - asr_models:/app/models
     depends_on:
       - postgres
       - redis
@@ -18,7 +22,7 @@ services:
 
   postgres:
     image: postgres:16-alpine
-    container_name: multi-agent-hy-postgres
+    container_name: multi-agent-meeting-postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-meeting_assistant}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -31,7 +35,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: multi-agent-hy-redis
+    container_name: multi-agent-meeting-redis
     ports:
       - "6379:6379"
     volumes:
@@ -40,7 +44,7 @@ services:
 
   chromadb:
     image: chromadb/chroma:latest
-    container_name: multi-agent-hy-chromadb
+    container_name: multi-agent-meeting-chromadb
     ports:
       - "8001:8000"
     volumes:
@@ -49,5 +53,10 @@ services:
 
 volumes:
   postgres_data:
+    name: multi-agent-meeting_postgres_data
   redis_data:
+    name: multi-agent-meeting_redis_data
   chroma_data:
+    name: multi-agent-meeting_chroma_data
+  asr_models:
+    name: multi-agent-meeting_asr_models

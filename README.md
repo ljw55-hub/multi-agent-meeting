@@ -1,85 +1,183 @@
-# Multi-Agent HY Meeting Assistant
+# Multi-Agent Meeting Assistant
 
-一个可演示、可继续扩展、适合放到 GitHub 的多 Agent 智能会议助手。项目参考 `multi-agent-meeting-assistant-guide-zh` 和原始 `python` 代码，但这里重新整理成更干净的学习版工程，重点是你能讲清楚架构、节点职责和落地路径。
+Multi-Agent Meeting Assistant is a backend service for turning meeting audio into structured meeting records, action items, insights, and follow-up artifacts.
 
-## 功能闭环
+The system uses FastAPI as the service layer, Faster-Whisper for speech transcription, LangGraph for multi-agent orchestration, PostgreSQL for persistent storage, and ChromaDB for semantic retrieval over meeting history.
 
-- FastAPI REST API 和 WebSocket 接入层
-- LangGraph Pipeline + Fan-out/Fan-in 编排
-- 5 个 Agent 节点：
-  - `TranscriptionAgent`：音频转写入口，当前提供 demo transcript，后续可接 WhisperX
-  - `SummaryAgent`：生成结构化会议纪要
-  - `ActionAgent`：抽取负责人、任务、截止时间、优先级
-  - `InsightAgent`：统计发言占比、关键词、会议亮点和效率评分
-  - `FollowUpAgent`：汇总结果并生成会后报告路径
-- 离线 fallback 模式：没有 OpenAI/MiniMax Key 时也能跑完整 demo
-- Docker Compose 本地环境：API + PostgreSQL + Redis + ChromaDB
+## Features
 
-## 快速启动
+- Audio upload and asynchronous meeting processing
+- Faster-Whisper based speech transcription
+- Optional WhisperX alignment and pyannote speaker diarization
+- LangGraph pipeline with dedicated agents:
+  - Transcription Agent
+  - Summary Agent
+  - Action Agent
+  - Insight Agent
+  - Follow-up Agent
+- OpenAI-compatible LLM integration, including SiliconFlow
+- Configurable timeout, retry, fallback, and Agent parallelism
+- PostgreSQL persistence for meeting metadata, status, and reports
+- ChromaDB vector storage for meeting memory search
+- REST API, full-result WebSocket, and chunked transcription WebSocket entry points
+- Optional Jira, Feishu, and SMTP follow-up integrations
+- Docker Compose based local deployment
+
+## Architecture
+
+```text
+Client
+  -> FastAPI API Gateway
+  -> LangGraph Meeting Pipeline
+     -> Transcription Agent
+     -> Summary Agent
+     -> Action Agent
+     -> Insight Agent
+     -> Follow-up Agent
+  -> PostgreSQL / ChromaDB
+```
+
+## Quick Start
 
 ```bash
 docker compose up -d --build
 ```
 
-然后访问：
+Open:
 
-- API: http://localhost:8000
-- Swagger: http://localhost:8000/docs
-- 健康检查: http://localhost:8000/health
+- Web console: http://localhost:8000/ui
+- API root: http://localhost:8000
+- Swagger UI: http://localhost:8000/docs
+- Health check: http://localhost:8000/health
 
-运行 demo：
+The web console supports meeting creation, audio upload, progress tracking, report viewing, microphone streaming, and ChromaDB memory search.
+
+Run a built-in demo meeting:
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/meeting/demo/demo
 ```
 
-如果 Docker Hub 网络拉取 `python:3.11-slim` 超时，等网络恢复后重试同一条命令即可。
-
-## API 示例
-
-创建会议：
+Upload an audio file:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/meeting/start ^
-  -H "Content-Type: application/json" ^
-  -d "{\"title\":\"Q3预算评审会\",\"participants\":[\"张总\",\"李明\",\"王芳\",\"赵伟\"],\"language\":\"zh\"}"
+curl -X POST "http://localhost:8000/api/v1/meeting/meeting-001/upload?language=zh" \
+  -F "file=@meeting.m4a;type=audio/x-m4a"
 ```
 
-运行指定会议 demo：
+Check processing status:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/meeting/{meeting_id}/demo
+curl http://localhost:8000/api/v1/meeting/meeting-001/status
 ```
 
-查询完整报告：
+Read the final report:
 
 ```bash
-curl http://localhost:8000/api/v1/meeting/{meeting_id}/report
+curl http://localhost:8000/api/v1/meeting/meeting-001/report
 ```
 
-## 环境变量
+Stream audio through WebSocket:
 
-复制 `.env.example` 为 `.env`，按需填写：
+```text
+ws://localhost:8000/ws/transcription/meeting-001
+```
+
+Protocol:
+
+```json
+{"type":"config","language":"zh","audio_file_name":"meeting.webm"}
+```
+
+Then send binary audio chunks. Send `{"type":"flush"}` to receive a partial transcript snapshot. Send `{"type":"stop"}` to finalize transcription and run the full multi-agent pipeline.
+
+Search historical meeting memory:
 
 ```bash
-LLM_PROVIDER=offline
-OPENAI_API_KEY=
-MINIMAX_API_KEY=
-MINIMAX_GROUP_ID=
+curl "http://localhost:8000/api/v1/meeting/search?query=项目上线 张三&limit=5"
 ```
 
-`LLM_PROVIDER=offline` 时会使用规则 fallback，适合面试演示和本地开发。需要接真实模型时改为 `openai` 或 `minimax` 并填写 Key。
+## Configuration
 
-## 面试讲法
+Copy `.env.example` to `.env` and update values as needed.
 
-- LangGraph 负责把会议处理流程显式建模为状态图：转写先执行，纪要/待办/洞察并行执行，最后由跟进 Agent 汇总。
-- 每个 Agent 只写自己负责的状态字段，便于排错、观测和替换。
-- 规则逻辑负责确定性计算，例如发言统计；LLM 负责语义理解，例如纪要、待办和洞察。
-- fallback 模式保证系统在没有模型 Key、外部 API 异常时仍能完成主流程，这体现工程可用性。
+```env
+LLM_PROVIDER=openai
+OPENAI_BASE_URL=https://api.siliconflow.cn/v1
+OPENAI_MODEL_NAME=deepseek-ai/DeepSeek-V4-Flash
+OPENAI_API_KEY=your-api-key
+```
 
-## 项目文档
+Stable development settings:
 
-- [从零运行教程](docs/TUTORIAL.md)
-- [系统架构说明](docs/ARCHITECTURE.md)
-- [面试讲解稿](docs/INTERVIEW_GUIDE.md)
-- [项目路线图](docs/ROADMAP.md)
+```env
+LLM_TIMEOUT_SECONDS=180
+LLM_MAX_RETRIES=2
+LLM_PARALLEL_AGENTS=false
+```
+
+ASR settings:
+
+```env
+ASR_PROVIDER=faster_whisper
+ASR_MODEL_SIZE=tiny
+ASR_DEVICE=cpu
+ASR_COMPUTE_TYPE=int8
+ASR_AUTO_DOWNLOAD=true
+ASR_MODEL_DIR=/app/models/faster-whisper-tiny
+HF_ENDPOINT=https://hf-mirror.com
+HF_HUB_DISABLE_XET=1
+```
+
+WhisperX speaker diarization can be enabled when the optional dependencies and HuggingFace token are available:
+
+```env
+ASR_PROVIDER=whisperx
+WHISPERX_MODEL=small
+WHISPERX_DEVICE=cpu
+WHISPERX_COMPUTE_TYPE=int8
+DIARIZATION_ENABLED=true
+HF_TOKEN=your-huggingface-token
+```
+
+External follow-up integrations are disabled unless configured:
+
+```env
+JIRA_SERVER=
+JIRA_EMAIL=
+JIRA_API_TOKEN=
+JIRA_PROJECT_KEY=MEET
+
+FEISHU_APP_ID=
+FEISHU_APP_SECRET=
+FEISHU_WEBHOOK_URL=
+
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM=
+```
+
+## Persistence
+
+PostgreSQL stores:
+
+- `meetings`: meeting metadata
+- `meeting_statuses`: asynchronous processing state
+- `meeting_results`: structured meeting reports
+
+ChromaDB stores vectorized meeting memory for semantic search.
+
+Docker volumes are used for local persistence:
+
+- `postgres_data`
+- `chroma_data`
+- `asr_models`
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Local Development Guide](docs/TUTORIAL.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)

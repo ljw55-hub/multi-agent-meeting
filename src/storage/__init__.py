@@ -1,0 +1,1 @@
+"""Persistence and retrieval adapters."""

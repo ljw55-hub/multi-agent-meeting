@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
 from ..integrations.llm_client import LLMClient
 from ..models import MeetingSummary, TopicSummary
@@ -14,19 +15,29 @@ class SummaryAgent:
         fallback = self._fallback(state)
         result = await self.llm.chat_json(
             messages=[
-                {"role": "system", "content": "你是会议纪要助手，只输出 JSON。"},
+                {
+                    "role": "system",
+                    "content": (
+                        "你是会议纪要助手，只输出严格 JSON。"
+                        "topics 必须是对象数组，每个对象包含 title、discussion_points、participants、conclusion。"
+                        "discussion_points、participants、decisions、next_steps 必须是字符串数组。"
+                    ),
+                },
                 {
                     "role": "user",
                     "content": (
                         "根据会议转写生成结构化纪要，字段包含 title,date,participants,"
-                        "topics,decisions,next_steps。\n\n"
+                        "topics,decisions,next_steps。不要输出 Markdown，不要输出解释。\n\n"
                         f"{state.get('transcript_text', '')}"
                     ),
                 },
             ],
             fallback=fallback.model_dump(),
         )
-        state["summary"] = MeetingSummary(**result)
+        try:
+            state["summary"] = MeetingSummary(**self._normalize_result(result, fallback))
+        except Exception:
+            state["summary"] = fallback
         return state
 
     @staticmethod
@@ -53,7 +64,7 @@ class SummaryAgent:
                         "服务器采购需要完成供应商对比并输出方案。",
                     ],
                     participants=["王芳", "赵伟", "张总"],
-                    conclusion="招聘 JD 和采购方案分别由责任人按期推进。",
+                    conclusion="招聘 JD 和采购方案分别由负责人按期推进。",
                 ),
             ],
             decisions=[
@@ -66,3 +77,52 @@ class SummaryAgent:
                 "赵伟下周一前提交服务器采购方案。",
             ],
         )
+
+    @staticmethod
+    def _normalize_result(result: dict[str, Any], fallback: MeetingSummary) -> dict[str, Any]:
+        normalized = fallback.model_dump() | result
+
+        participants = normalized.get("participants", [])
+        if isinstance(participants, str):
+            normalized["participants"] = _ensure_list(participants)
+
+        topics = normalized.get("topics", [])
+        if isinstance(topics, str):
+            topics = [topics]
+        if isinstance(topics, list):
+            normalized_topics = []
+            for item in topics:
+                if isinstance(item, dict):
+                    normalized_topics.append(
+                        {
+                            "title": str(item.get("title", "")),
+                            "discussion_points": _ensure_list(item.get("discussion_points", [])),
+                            "participants": _ensure_list(item.get("participants", [])),
+                            "conclusion": str(item.get("conclusion", "")),
+                        }
+                    )
+                elif isinstance(item, str):
+                    normalized_topics.append(
+                        {
+                            "title": item,
+                            "discussion_points": [item],
+                            "participants": normalized.get("participants", []),
+                            "conclusion": "",
+                        }
+                    )
+            normalized["topics"] = normalized_topics
+
+        normalized["decisions"] = _ensure_list(normalized.get("decisions", []))
+        normalized["next_steps"] = _ensure_list(normalized.get("next_steps", []))
+        return normalized
+
+
+def _ensure_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str):
+        normalized = value.replace("；", ";").replace("，", ",").replace("、", ",")
+        return [item.strip() for part in normalized.split(";") for item in part.split(",") if item.strip()]
+    return [str(value)]

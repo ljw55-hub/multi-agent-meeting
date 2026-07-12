@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Multi-Agent Meeting Assistant</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">MA</div>
+          <div>
+            <h1>Meeting Assistant</h1>
+            <p>Multi-agent meeting intelligence</p>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <a href="#upload">Audio Upload</a>
+          <a href="#stream">Live Stream</a>
+          <a href="#results">Results</a>
+          <a href="#search">Memory Search</a>
+        </nav>
+
+        <div class="system-panel">
+          <span class="status-dot" id="healthDot"></span>
+          <div>
+            <strong id="healthText">Checking service</strong>
+            <small id="healthHint">FastAPI backend</small>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <section class="topbar">
+          <div>
+            <p class="eyebrow">Workspace</p>
+            <h2>Meeting Processing Console</h2>
+          </div>
+          <div class="meeting-chip">
+            <span>Meeting ID</span>
+            <strong id="currentMeetingId">Not created</strong>
+          </div>
+        </section>
+
+        <section class="grid two" id="upload">
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <h3>Create Meeting</h3>
+                <p>Set metadata before uploading audio.</p>
+              </div>
+            </div>
+            <label>
+              Title
+              <input id="meetingTitle" type="text" value="Project Sync Meeting" />
+            </label>
+            <label>
+              Participants
+              <input id="participants" type="text" value="alice@example.com,bob@example.com" />
+            </label>
+            <label>
+              Language
+              <select id="language">
+                <option value="zh">Chinese</option>
+                <option value="en">English</option>
+              </select>
+            </label>
+            <div class="actions-row">
+              <button id="createMeetingBtn" type="button">Create</button>
+              <button id="sampleBtn" type="button" class="secondary">Run Sample</button>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <h3>Upload Audio</h3>
+                <p>Submit a local meeting recording for background processing.</p>
+              </div>
+            </div>
+            <label>
+              Audio file
+              <input id="audioFile" type="file" accept="audio/*,.m4a,.mp3,.wav,.flac,.ogg,.webm" />
+            </label>
+            <button id="uploadBtn" type="button">Upload And Process</button>
+            <div class="progress-wrap">
+              <div class="progress-meta">
+                <span id="stageText">Idle</span>
+                <span id="progressText">0%</span>
+              </div>
+              <div class="progress-track"><div id="progressBar"></div></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="grid two" id="stream">
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <h3>Live Audio Stream</h3>
+                <p>Record microphone audio through WebSocket chunked transcription.</p>
+              </div>
+            </div>
+            <div class="actions-row">
+              <button id="startStreamBtn" type="button">Start Recording</button>
+              <button id="flushStreamBtn" type="button" class="secondary" disabled>Flush Text</button>
+              <button id="stopStreamBtn" type="button" class="danger" disabled>Stop And Analyze</button>
+            </div>
+            <div class="stream-status" id="streamStatus">Microphone is idle.</div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <div>
+                <h3>Live Transcript</h3>
+                <p>Partial transcript snapshots from the stream endpoint.</p>
+              </div>
+            </div>
+            <div class="transcript-box" id="liveTranscript">No streaming transcript yet.</div>
+          </div>
+        </section>
+
+        <section class="panel" id="results">
+          <div class="panel-header">
+            <div>
+              <h3>Processing Results</h3>
+              <p>Structured output from the five-agent pipeline.</p>
+            </div>
+            <button id="refreshReportBtn" type="button" class="secondary">Refresh Report</button>
+          </div>
+
+          <div class="tabs" role="tablist">
+            <button class="tab active" data-tab="transcript">Transcript</button>
+            <button class="tab" data-tab="summary">Summary</button>
+            <button class="tab" data-tab="actions">Actions</button>
+            <button class="tab" data-tab="insights">Insights</button>
+            <button class="tab" data-tab="followup">Follow-up</button>
+          </div>
+
+          <div class="result-body" id="resultBody">Create a meeting and process audio to view results.</div>
+        </section>
+
+        <section class="panel" id="search">
+          <div class="panel-header">
+            <div>
+              <h3>Meeting Memory Search</h3>
+              <p>Query stored meeting memories from ChromaDB.</p>
+            </div>
+          </div>
+          <div class="search-row">
+            <input id="searchQuery" type="text" value="project follow up action items" />
+            <button id="searchBtn" type="button">Search</button>
+          </div>
+          <div class="memory-list" id="memoryResults">No search results yet.</div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" hidden></div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

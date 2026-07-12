@@ -121,6 +121,7 @@ class FollowUpResult(BaseModel):
 def create_initial_state(
     meeting_id: str,
     audio_data: bytes = b"",
+    audio_file_name: str = "",
     title: str = "",
     participants: list[str] | None = None,
     language: str = "zh",
@@ -128,6 +129,7 @@ def create_initial_state(
     return {
         "meeting_id": meeting_id,
         "audio_data": audio_data,
+        "audio_file_name": audio_file_name,
         "title": title,
         "participants": participants or [],
         "language": language,

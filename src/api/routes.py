@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 from datetime import datetime, timezone
@@ -9,13 +10,25 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
+from ..agents import TranscriptionAgent
 from ..graph import run_meeting_pipeline
-
+from ..storage.database import (
+    get_meeting_metadata,
+    get_meeting_result,
+    get_meeting_status,
+    save_meeting_result,
+    save_meeting_status,
+    upsert_meeting_metadata,
+)
+from ..storage.vector_store import search_meeting_memories, upsert_meeting_memory
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
+# Small process-local caches. Postgres is the source of truth.
 meeting_results: dict[str, dict[str, Any]] = {}
 meeting_metadata: dict[str, dict[str, Any]] = {}
+meeting_statuses: dict[str, dict[str, Any]] = {}
 
 
 class MeetingStartRequest(BaseModel):
@@ -37,16 +50,123 @@ def _serialize_state(state: dict[str, Any]) -> dict[str, Any]:
     for key in ("transcript", "summary", "actions", "insights", "followup"):
         value = state.get(key)
         if hasattr(value, "model_dump"):
-            data[key] = value.model_dump()
+            data[key] = value.model_dump(mode="json")
+        elif isinstance(value, dict):
+            data[key] = value
     return data
+
+
+def _set_meeting_status(
+    meeting_id: str,
+    status: str,
+    stage: str,
+    progress: int,
+    message: str,
+    errors: list[str] | None = None,
+) -> dict[str, Any]:
+    payload = save_meeting_status(
+        meeting_id=meeting_id,
+        status=status,
+        stage=stage,
+        progress=progress,
+        message=message,
+        errors=errors or [],
+    )
+    meeting_statuses[meeting_id] = payload
+    return payload
+
+
+def _progress_callback(meeting_id: str):
+    async def callback(stage: str, progress: int, message: str) -> None:
+        status = "completed" if stage == "completed" else "processing"
+        _set_meeting_status(meeting_id, status, stage, progress, message)
+
+    return callback
+
+
+def _persist_completed_result(meeting_id: str, result: dict[str, Any]) -> dict[str, Any]:
+    data = _serialize_state(result)
+    stored_in_vector_db = upsert_meeting_memory(data)
+    followup = data.get("followup")
+    if isinstance(followup, dict):
+        followup["stored_in_vector_db"] = stored_in_vector_db
+    meeting_results[meeting_id] = data
+    save_meeting_result(meeting_id, data)
+    return data
+
+
+def _load_result(meeting_id: str) -> dict[str, Any] | None:
+    return meeting_results.get(meeting_id) or get_meeting_result(meeting_id)
+
+
+def _load_metadata(meeting_id: str) -> dict[str, Any]:
+    return get_meeting_metadata(meeting_id) or meeting_metadata.get(meeting_id, {})
+
+
+def _safe_json_loads(text: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _transcript_payload(transcript: Any) -> dict[str, Any]:
+    if hasattr(transcript, "model_dump"):
+        return transcript.model_dump(mode="json")
+    if isinstance(transcript, dict):
+        return transcript
+    return {}
+
+
+async def _send_pipeline_events(websocket: WebSocket, state: dict[str, Any], processing_time_s: float = 0.0) -> None:
+    transcript = state.get("transcript")
+    if transcript and hasattr(transcript, "segments"):
+        for segment in transcript.segments:
+            await websocket.send_json(
+                {
+                    "type": "transcript",
+                    "data": {
+                        "speaker": segment.speaker,
+                        "text": segment.text,
+                        "timestamp": segment.start,
+                        "start": segment.start,
+                        "end": segment.end,
+                        "is_final": True,
+                        "confidence": segment.confidence,
+                    },
+                }
+            )
+
+    for event_type, key in (
+        ("summary", "summary"),
+        ("actions", "actions"),
+        ("insights", "insights"),
+        ("followup", "followup"),
+    ):
+        value = state.get(key)
+        if hasattr(value, "model_dump"):
+            await websocket.send_json({"type": event_type, "data": value.model_dump(mode="json")})
+        elif isinstance(value, dict):
+            await websocket.send_json({"type": event_type, "data": value})
+
+    await websocket.send_json(
+        {
+            "type": "completed",
+            "meeting_id": state.get("meeting_id"),
+            "processing_time_s": round(processing_time_s, 2),
+            "errors": state.get("errors", []),
+        }
+    )
 
 
 @router.get("/")
 async def root() -> dict[str, Any]:
     return {
-        "name": "Multi-Agent HY Meeting Assistant",
+        "name": "Multi-Agent Meeting Assistant",
         "status": "healthy",
         "docs": "/docs",
+        "ui": "/ui",
         "demo": "/api/v1/meeting/demo/demo",
         "agents": ["transcription", "summary", "action", "insight", "followup"],
     }
@@ -62,7 +182,9 @@ async def start_meeting(request: MeetingStartRequest) -> dict[str, Any]:
     if request.language not in {"zh", "en"}:
         raise HTTPException(status_code=400, detail="language only supports zh/en")
     meeting_id = f"m-{uuid.uuid4().hex[:12]}"
-    meeting_metadata[meeting_id] = request.model_dump() | {"created_at": _now()}
+    metadata = upsert_meeting_metadata(meeting_id, request.model_dump())
+    meeting_metadata[meeting_id] = metadata
+    _set_meeting_status(meeting_id, "created", "created", 0, "Meeting created")
     return {
         "meeting_id": meeting_id,
         "status": "created",
@@ -73,29 +195,61 @@ async def start_meeting(request: MeetingStartRequest) -> dict[str, Any]:
 @router.post("/api/v1/meeting/{meeting_id}/demo")
 async def run_demo(meeting_id: str) -> dict[str, Any]:
     started = time.time()
-    meta = meeting_metadata.get(meeting_id, {})
+    meta = _load_metadata(meeting_id)
+    _set_meeting_status(meeting_id, "processing", "queued", 0, "Demo job queued")
     result = await run_meeting_pipeline(
         meeting_id=meeting_id,
         title=meta.get("title", ""),
         participants=meta.get("participants", []),
         language=meta.get("language", "zh"),
+        progress_callback=_progress_callback(meeting_id),
     )
-    meeting_results[meeting_id] = result
-    response = _serialize_state(result)
+    response = _persist_completed_result(meeting_id, result)
+    _set_meeting_status(
+        meeting_id,
+        "completed",
+        "completed",
+        100,
+        "Meeting processing completed",
+        errors=response.get("errors", []),
+    )
     response["processing_time_s"] = round(time.time() - started, 2)
     return response
 
 
 async def _process_upload(meeting_id: str, audio_data: bytes, language: str = "zh") -> None:
-    meta = meeting_metadata.get(meeting_id, {})
-    result = await run_meeting_pipeline(
-        meeting_id=meeting_id,
-        audio_data=audio_data,
-        title=meta.get("title", ""),
-        participants=meta.get("participants", []),
-        language=language,
-    )
-    meeting_results[meeting_id] = result
+    meta = _load_metadata(meeting_id)
+    try:
+        _set_meeting_status(meeting_id, "processing", "queued", 1, "Background job started")
+        result = await run_meeting_pipeline(
+            meeting_id=meeting_id,
+            audio_data=audio_data,
+            audio_file_name=meta.get("audio_file_name", ""),
+            title=meta.get("title", ""),
+            participants=meta.get("participants", []),
+            language=language,
+            progress_callback=_progress_callback(meeting_id),
+        )
+        response = _persist_completed_result(meeting_id, result)
+        _set_meeting_status(
+            meeting_id,
+            "completed",
+            "completed",
+            100,
+            "Meeting processing completed",
+            errors=response.get("errors", []),
+        )
+    except Exception as exc:
+        logger.exception("Meeting upload processing failed: meeting_id=%s", meeting_id)
+        previous = get_meeting_status(meeting_id) or {}
+        _set_meeting_status(
+            meeting_id,
+            "failed",
+            "failed",
+            previous.get("progress", 0),
+            "Meeting processing failed",
+            errors=[str(exc)],
+        )
 
 
 @router.post("/api/v1/meeting/{meeting_id}/upload", status_code=202)
@@ -106,6 +260,15 @@ async def upload_audio(
     language: str = "zh",
 ) -> dict[str, Any]:
     audio_data = await file.read()
+    metadata = upsert_meeting_metadata(
+        meeting_id,
+        {
+            "audio_file_name": file.filename or "",
+            "language": language,
+        },
+    )
+    meeting_metadata[meeting_id] = metadata
+    _set_meeting_status(meeting_id, "processing", "uploaded", 0, "Audio uploaded")
     background_tasks.add_task(_process_upload, meeting_id, audio_data, language)
     return {
         "meeting_id": meeting_id,
@@ -115,23 +278,62 @@ async def upload_audio(
     }
 
 
+@router.get("/api/v1/meeting/search")
+async def search_meetings(query: str, limit: int = 5) -> dict[str, Any]:
+    return {
+        "query": query,
+        "results": search_meeting_memories(query, limit=limit),
+    }
+
+
 @router.get("/api/v1/meeting/{meeting_id}/report")
 async def get_report(meeting_id: str) -> dict[str, Any]:
-    result = meeting_results.get(meeting_id)
+    result = _load_result(meeting_id)
     if not result:
         raise HTTPException(status_code=404, detail=f"meeting not found: {meeting_id}")
-    return _serialize_state(result)
+    return result
+
+
+@router.get("/api/v1/meeting/{meeting_id}/status")
+async def get_status(meeting_id: str) -> dict[str, Any]:
+    status = meeting_statuses.get(meeting_id) or get_meeting_status(meeting_id)
+    if status:
+        return status
+
+    result = _load_result(meeting_id)
+    if result:
+        return {
+            "meeting_id": meeting_id,
+            "status": "completed",
+            "stage": "completed",
+            "progress": 100,
+            "message": "Meeting processing completed",
+            "errors": result.get("errors", []),
+            "updated_at": _now(),
+        }
+
+    meta = _load_metadata(meeting_id)
+    if meta:
+        return {
+            "meeting_id": meeting_id,
+            "status": "created",
+            "stage": "created",
+            "progress": 0,
+            "message": "Meeting created",
+            "errors": [],
+            "updated_at": meta.get("created_at", _now()),
+        }
+    raise HTTPException(status_code=404, detail=f"meeting not found: {meeting_id}")
 
 
 @router.get("/api/v1/meeting/{meeting_id}/{section}")
 async def get_section(meeting_id: str, section: str) -> Any:
     if section not in {"transcript", "summary", "actions", "insights", "followup"}:
         raise HTTPException(status_code=404, detail="unknown section")
-    result = meeting_results.get(meeting_id)
+    result = _load_result(meeting_id)
     if not result:
         raise HTTPException(status_code=404, detail=f"meeting not found: {meeting_id}")
-    value = result.get(section)
-    return value.model_dump() if hasattr(value, "model_dump") else value
+    return result.get(section)
 
 
 @router.websocket("/ws/meeting/{meeting_id}")
@@ -148,11 +350,180 @@ async def websocket_meeting(websocket: WebSocket, meeting_id: str) -> None:
             elif message.get("text"):
                 payload = json.loads(message["text"])
                 if payload.get("type") in {"demo", "stop"}:
+                    started = time.time()
                     await websocket.send_json({"type": "processing", "stage": "pipeline"})
-                    result = await run_meeting_pipeline(meeting_id, bytes(audio_buffer))
-                    meeting_results[meeting_id] = result
-                    await websocket.send_json({"type": "completed", "data": _serialize_state(result)})
+                    _set_meeting_status(meeting_id, "processing", "queued", 1, "WebSocket job started")
+                    result = await run_meeting_pipeline(
+                        meeting_id,
+                        bytes(audio_buffer),
+                        progress_callback=_progress_callback(meeting_id),
+                    )
+                    data = _persist_completed_result(meeting_id, result)
+                    _set_meeting_status(
+                        meeting_id,
+                        "completed",
+                        "completed",
+                        100,
+                        "Meeting processing completed",
+                        errors=data.get("errors", []),
+                    )
+                    await _send_pipeline_events(websocket, result, time.time() - started)
                 elif payload.get("type") == "ping":
                     await websocket.send_json({"type": "pong"})
     except WebSocketDisconnect:
         return
+
+
+@router.websocket("/ws/transcription/{meeting_id}")
+async def websocket_transcription(websocket: WebSocket, meeting_id: str) -> None:
+    """Receive audio chunks and return rolling transcription snapshots.
+
+    Faster-Whisper works on audio files rather than native token streams. This
+    endpoint therefore buffers incoming chunks and transcribes the current audio
+    window when the client sends `flush`, when the buffer reaches the configured
+    threshold, or when the client sends `stop`.
+    """
+    await websocket.accept()
+
+    agent = TranscriptionAgent()
+    audio_buffer = bytearray()
+    language = "zh"
+    audio_file_name = "stream.webm"
+    min_flush_bytes = 512_000
+    last_flush_size = 0
+    last_flush_time = 0.0
+    flush_interval_s = 8.0
+
+    metadata = upsert_meeting_metadata(
+        meeting_id,
+        {
+            "language": language,
+            "audio_file_name": audio_file_name,
+            "streaming": True,
+        },
+    )
+    meeting_metadata[meeting_id] = metadata
+    _set_meeting_status(meeting_id, "processing", "streaming", 0, "Streaming transcription connected")
+
+    await websocket.send_json(
+        {
+            "type": "connected",
+            "meeting_id": meeting_id,
+            "mode": "chunked_transcription",
+            "message": "Send binary audio chunks, then send {'type':'flush'} for partial text or {'type':'stop'} to finish.",
+        }
+    )
+
+    async def flush_transcript(event_type: str) -> None:
+        nonlocal last_flush_size, last_flush_time
+        if not audio_buffer:
+            await websocket.send_json({"type": event_type, "meeting_id": meeting_id, "buffer_size": 0, "transcript": None})
+            return
+
+        _set_meeting_status(
+            meeting_id,
+            "processing",
+            "streaming_transcription",
+            15,
+            f"Transcribing streaming buffer ({len(audio_buffer)} bytes)",
+        )
+        transcript = await agent.transcribe_bytes(
+            meeting_id=meeting_id,
+            audio_data=bytes(audio_buffer),
+            audio_file_name=audio_file_name,
+            language=language,
+        )
+        last_flush_size = len(audio_buffer)
+        last_flush_time = time.time()
+        await websocket.send_json(
+            {
+                "type": event_type,
+                "meeting_id": meeting_id,
+                "buffer_size": len(audio_buffer),
+                "transcript": _transcript_payload(transcript),
+            }
+        )
+
+    try:
+        while True:
+            message = await websocket.receive()
+            if message.get("bytes"):
+                audio_buffer.extend(message["bytes"])
+                await websocket.send_json(
+                    {
+                        "type": "buffered",
+                        "meeting_id": meeting_id,
+                        "buffer_size": len(audio_buffer),
+                    }
+                )
+                enough_new_audio = len(audio_buffer) - last_flush_size >= min_flush_bytes
+                enough_time = time.time() - last_flush_time >= flush_interval_s
+                if enough_new_audio and enough_time:
+                    await flush_transcript("partial_transcript")
+                continue
+
+            if not message.get("text"):
+                continue
+
+            payload = _safe_json_loads(message["text"])
+            event_type = payload.get("type")
+
+            if event_type == "config":
+                language = payload.get("language", language)
+                audio_file_name = payload.get("audio_file_name", audio_file_name)
+                min_flush_bytes = int(payload.get("min_flush_bytes", min_flush_bytes))
+                flush_interval_s = float(payload.get("flush_interval_s", flush_interval_s))
+                metadata = upsert_meeting_metadata(
+                    meeting_id,
+                    {
+                        "language": language,
+                        "audio_file_name": audio_file_name,
+                        "streaming": True,
+                    },
+                )
+                meeting_metadata[meeting_id] = metadata
+                await websocket.send_json(
+                    {
+                        "type": "configured",
+                        "meeting_id": meeting_id,
+                        "language": language,
+                        "audio_file_name": audio_file_name,
+                        "min_flush_bytes": min_flush_bytes,
+                        "flush_interval_s": flush_interval_s,
+                    }
+                )
+            elif event_type == "flush":
+                await flush_transcript("partial_transcript")
+            elif event_type == "stop":
+                started = time.time()
+                await flush_transcript("final_transcript")
+                await websocket.send_json({"type": "processing", "stage": "pipeline"})
+                _set_meeting_status(meeting_id, "processing", "queued", 20, "Streaming audio finalized")
+                result = await run_meeting_pipeline(
+                    meeting_id=meeting_id,
+                    audio_data=bytes(audio_buffer),
+                    audio_file_name=audio_file_name,
+                    language=language,
+                    progress_callback=_progress_callback(meeting_id),
+                )
+                data = _persist_completed_result(meeting_id, result)
+                _set_meeting_status(
+                    meeting_id,
+                    "completed",
+                    "completed",
+                    100,
+                    "Meeting processing completed",
+                    errors=data.get("errors", []),
+                )
+                await _send_pipeline_events(websocket, result, time.time() - started)
+                break
+            elif event_type == "ping":
+                await websocket.send_json({"type": "pong"})
+            else:
+                await websocket.send_json({"type": "error", "message": f"Unsupported event type: {event_type}"})
+    except WebSocketDisconnect:
+        return
+    except Exception as exc:
+        logger.exception("Streaming transcription failed: meeting_id=%s", meeting_id)
+        _set_meeting_status(meeting_id, "failed", "streaming_failed", 0, "Streaming transcription failed", [str(exc)])
+        await websocket.send_json({"type": "error", "message": str(exc)})

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from typing import Any
 
 from ..integrations.llm_client import LLMClient
 from ..models import MeetingInsight, SpeakerStats, TranscriptResult
@@ -20,23 +21,35 @@ class InsightAgent:
             "keywords": self._keywords(transcript),
             "highlights": [
                 "会议明确了 Q3 预算上调方向。",
-                "招聘与服务器采购均形成了责任人和截止时间。",
+                "招聘与服务器采购均形成了负责人和截止时间。",
             ],
-            "suggestions": ["后续可把预算审批、招聘 JD、采购方案接入任务系统自动追踪。"],
+            "suggestions": [
+                "后续可把预算审批、招聘 JD、采购方案接入任务系统自动追踪。"
+            ],
         }
         result = await self.llm.chat_json(
             messages=[
-                {"role": "system", "content": "你是会议洞察分析师，只输出 JSON。"},
+                {
+                    "role": "system",
+                    "content": (
+                        "你是会议洞察分析师，只输出严格 JSON。"
+                        "overall_sentiment 必须是 positive/neutral/negative。"
+                        "sentiment_score 和 efficiency_score 必须是数字。"
+                        "keywords、highlights、suggestions 必须是字符串数组。"
+                    ),
+                },
                 {
                     "role": "user",
                     "content": (
-                        "分析会议情绪、关键词、亮点、改进建议、效率评分。\n\n"
+                        "分析会议情绪、关键词、亮点、改进建议、效率评分。"
+                        "不要输出 Markdown，不要输出解释。\n\n"
                         f"{state.get('transcript_text', '')}"
                     ),
                 },
             ],
             fallback=fallback,
         )
+        result = self._normalize_result(result, fallback)
         state["insights"] = MeetingInsight(
             meeting_id=state["meeting_id"],
             speaker_stats=stats,
@@ -79,3 +92,34 @@ class InsightAgent:
         text = transcript.full_text
         counted = Counter({word: text.count(word) for word in candidates})
         return [word for word, count in counted.most_common(6) if count > 0]
+
+    @staticmethod
+    def _normalize_result(result: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
+        normalized = fallback | result
+        normalized["overall_sentiment"] = str(normalized.get("overall_sentiment", "neutral")).lower()
+        if normalized["overall_sentiment"] not in {"positive", "neutral", "negative"}:
+            normalized["overall_sentiment"] = "neutral"
+        normalized["keywords"] = _ensure_list(normalized.get("keywords", []))
+        normalized["highlights"] = _ensure_list(normalized.get("highlights", []))
+        normalized["suggestions"] = _ensure_list(normalized.get("suggestions", []))
+        normalized["sentiment_score"] = _ensure_float(normalized.get("sentiment_score", 0.5), 0.5)
+        normalized["efficiency_score"] = _ensure_float(normalized.get("efficiency_score", 5.0), 5.0)
+        return normalized
+
+
+def _ensure_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str):
+        normalized = value.replace("；", ";").replace("，", ",").replace("、", ",")
+        return [item.strip() for part in normalized.split(";") for item in part.split(",") if item.strip()]
+    return [str(value)]
+
+
+def _ensure_float(value: Any, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
