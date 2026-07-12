@@ -21,6 +21,7 @@
           <a href="#upload">Audio Upload</a>
           <a href="#stream">Live Stream</a>
           <a href="#results">Results</a>
+          <a href="#action-board">Action Board</a>
           <a href="#search">Memory Search</a>
         </nav>
 
@@ -155,6 +156,27 @@
             <button id="refreshMeetingsBtn" type="button" class="secondary">Refresh List</button>
           </div>
           <div class="memory-list" id="meetingList">No meetings loaded yet.</div>
+        </section>
+
+        <section class="panel" id="action-board">
+          <div class="panel-header">
+            <div>
+              <h3>Action Board</h3>
+              <p>Track extracted action items independently from meeting reports.</p>
+            </div>
+            <button id="refreshActionsBtn" type="button" class="secondary">Refresh Actions</button>
+          </div>
+          <div class="filters-row">
+            <select id="actionStatusFilter">
+              <option value="all">All status</option>
+              <option value="pending">Pending</option>
+              <option value="in_progress">In progress</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+            <input id="actionAssigneeFilter" type="text" placeholder="Filter by assignee" />
+          </div>
+          <div class="memory-list" id="actionList">No action items loaded yet.</div>
         </section>
 
         <section class="panel" id="search">

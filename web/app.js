@@ -95,6 +95,57 @@ async function refreshMeetings() {
   });
 }
 
+async function refreshActionItems() {
+  const params = new URLSearchParams();
+  const status = $("actionStatusFilter").value;
+  const assignee = $("actionAssigneeFilter").value.trim();
+  if (status && status !== "all") {
+    params.set("status", status);
+  }
+  if (assignee) {
+    params.set("assignee", assignee);
+  }
+  params.set("limit", "100");
+
+  const data = await requestJson(`/api/v1/action-items?${params.toString()}`);
+  const items = data.items || [];
+  if (!items.length) {
+    $("actionList").textContent = "No action items found.";
+    return;
+  }
+
+  $("actionList").innerHTML = items
+    .map(
+      (item) => `
+        <div class="result-item action-row">
+          <div>
+            <strong>${escapeHtml(item.assignee || "Unassigned")}</strong>
+            <div>${escapeHtml(item.task)}</div>
+            <div><small>${escapeHtml(item.meeting_id)} | ${escapeHtml(item.priority)} | deadline: ${escapeHtml(item.deadline || "N/A")}</small></div>
+          </div>
+          <select data-action-status="${escapeHtml(item.item_id)}">
+            <option value="pending" ${item.status === "pending" ? "selected" : ""}>Pending</option>
+            <option value="in_progress" ${item.status === "in_progress" ? "selected" : ""}>In progress</option>
+            <option value="completed" ${item.status === "completed" ? "selected" : ""}>Completed</option>
+            <option value="cancelled" ${item.status === "cancelled" ? "selected" : ""}>Cancelled</option>
+          </select>
+        </div>`
+    )
+    .join("");
+
+  document.querySelectorAll("[data-action-status]").forEach((select) => {
+    select.addEventListener("change", async () => {
+      await requestJson(`/api/v1/action-items/${encodeURIComponent(select.dataset.actionStatus)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: select.value }),
+      });
+      showToast("Action status updated");
+      await refreshActionItems();
+    });
+  });
+}
+
 async function createMeeting() {
   const payload = {
     title: $("meetingTitle").value.trim(),
@@ -164,6 +215,7 @@ async function pollStatus() {
     if (status.status === "completed") {
       window.clearInterval(state.pollTimer);
       await loadReport();
+      await refreshActionItems();
     }
     if (status.status === "failed") {
       window.clearInterval(state.pollTimer);
@@ -417,6 +469,14 @@ function bindEvents() {
   $("refreshReportBtn").addEventListener("click", () => loadReport().catch((error) => showToast(error.message)));
   $("exportReportBtn").addEventListener("click", exportMarkdown);
   $("refreshMeetingsBtn").addEventListener("click", () => refreshMeetings().catch((error) => showToast(error.message)));
+  $("refreshActionsBtn").addEventListener("click", () => refreshActionItems().catch((error) => showToast(error.message)));
+  $("actionStatusFilter").addEventListener("change", () => refreshActionItems().catch((error) => showToast(error.message)));
+  $("actionAssigneeFilter").addEventListener("input", () => {
+    window.clearTimeout(refreshActionItems.timer);
+    refreshActionItems.timer = window.setTimeout(() => {
+      refreshActionItems().catch((error) => showToast(error.message));
+    }, 250);
+  });
   $("searchBtn").addEventListener("click", () => searchMemory().catch((error) => showToast(error.message)));
   $("startStreamBtn").addEventListener("click", () => startStream().catch((error) => showToast(error.message)));
   $("flushStreamBtn").addEventListener("click", flushStream);
@@ -435,3 +495,4 @@ function bindEvents() {
 bindEvents();
 checkHealth();
 refreshMeetings().catch(() => {});
+refreshActionItems().catch(() => {});

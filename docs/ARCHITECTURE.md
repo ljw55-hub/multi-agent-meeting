@@ -103,6 +103,7 @@ src/integrations/
 Persistent storage is split by responsibility:
 
 - PostgreSQL stores meeting metadata, processing status, and final reports.
+- PostgreSQL stores extracted action items in a dedicated task table for filtering and status updates.
 - ChromaDB stores vectorized meeting memories for semantic search.
 - Redis stores background meeting jobs consumed by the worker service.
 
@@ -122,7 +123,8 @@ src/storage/
 6. Summary, Action, and Insight Agents process the transcript.
 7. Follow-up Agent creates the report and optional external follow-up artifacts.
 8. The final report is stored in PostgreSQL and meeting memory is stored in ChromaDB.
-9. The user reads the report through the web console or API.
+9. Extracted action items are synchronized into the dedicated action item table.
+10. The user reads the report and manages action status through the web console or API.
 
 ## Fault Tolerance
 

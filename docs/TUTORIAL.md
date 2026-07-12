@@ -110,6 +110,20 @@ List recent meetings:
 curl http://localhost:8000/api/v1/meetings
 ```
 
+List extracted action items:
+
+```bash
+curl "http://localhost:8000/api/v1/action-items?status=pending"
+```
+
+Update an action item status:
+
+```bash
+curl -X PATCH http://localhost:8000/api/v1/action-items/act-12345678 \
+  -H "Content-Type: application/json" \
+  -d "{\"status\":\"completed\"}"
+```
+
 ## Stream Audio
 
 The service exposes a chunked WebSocket transcription endpoint:

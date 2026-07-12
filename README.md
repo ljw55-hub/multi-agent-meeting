@@ -18,6 +18,7 @@ The system uses FastAPI as the service layer, Faster-Whisper for speech transcri
 - OpenAI-compatible LLM integration, including SiliconFlow
 - Configurable timeout, retry, fallback, and Agent parallelism
 - PostgreSQL persistence for meeting metadata, status, and reports
+- Dedicated action item table with status tracking
 - ChromaDB vector storage for meeting memory search
 - Redis-backed background worker for audio processing jobs
 - REST API, full-result WebSocket, and chunked transcription WebSocket entry points
@@ -167,6 +168,7 @@ PostgreSQL stores:
 - `meetings`: meeting metadata
 - `meeting_statuses`: asynchronous processing state
 - `meeting_results`: structured meeting reports
+- `action_items`: extracted tasks with owners, priority, deadline, and status
 
 ChromaDB stores vectorized meeting memory for semantic search.
 

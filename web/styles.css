@@ -253,7 +253,8 @@ label {
 }
 
 .actions-row,
-.search-row {
+.search-row,
+.filters-row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -275,8 +276,21 @@ label {
   min-height: 34px;
 }
 
-.search-row input {
+.search-row input,
+.filters-row input,
+.filters-row select {
   flex: 1 1 260px;
+}
+
+.action-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 170px;
+  gap: 12px;
+  align-items: center;
+}
+
+.action-row select {
+  min-height: 34px;
 }
 
 .progress-wrap {

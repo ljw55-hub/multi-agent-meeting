@@ -112,3 +112,11 @@ This document records major engineering changes in the project.
 - Added `/api/v1/meetings` for recent meeting listing.
 - Added `/api/v1/meeting/{meeting_id}/export.md` for Markdown report export.
 - Added recent-meetings and Markdown export controls to the web console.
+
+## 11. Action Item Management
+
+- Added dedicated PostgreSQL table `action_items`.
+- Added synchronization from meeting report JSON into the action item table.
+- Added `GET /api/v1/action-items` with status and assignee filters.
+- Added `PATCH /api/v1/action-items/{item_id}` for status updates.
+- Added Action Board controls to the web console.

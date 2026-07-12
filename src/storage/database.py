@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import JSON, Column, DateTime, Integer, MetaData, String, Table, Text, create_engine, desc, select
+from sqlalchemy import JSON, Column, DateTime, Integer, MetaData, String, Table, Text, create_engine, delete, desc, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import Engine
 
@@ -41,6 +41,23 @@ meeting_results = Table(
     metadata,
     Column("meeting_id", String(128), primary_key=True),
     Column("result", JSON, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+
+action_items = Table(
+    "action_items",
+    metadata,
+    Column("item_id", String(128), primary_key=True),
+    Column("meeting_id", String(128), nullable=False, index=True),
+    Column("assignee", String(255), nullable=False, default=""),
+    Column("task", Text, nullable=False, default=""),
+    Column("deadline", String(128), nullable=False, default=""),
+    Column("priority", String(32), nullable=False, default="medium"),
+    Column("status", String(32), nullable=False, default="pending"),
+    Column("context", Text, nullable=False, default=""),
+    Column("jira_issue_key", String(128), nullable=True),
+    Column("feishu_task_id", String(128), nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=False),
 )
@@ -147,6 +164,7 @@ def save_meeting_result(meeting_id: str, result: dict[str, Any]) -> dict[str, An
     )
     with get_engine().begin() as conn:
         conn.execute(stmt)
+    sync_action_items_from_result(meeting_id, json_result)
     return payload
 
 
@@ -164,6 +182,69 @@ def get_meeting_result(meeting_id: str) -> dict[str, Any] | None:
         result.setdefault("updated_at", _json_safe(data.get("updated_at")))
         return result
     return None
+
+
+def sync_action_items_from_result(meeting_id: str, result: dict[str, Any]) -> None:
+    actions = result.get("actions") or {}
+    items = actions.get("action_items") if isinstance(actions, dict) else []
+    if not isinstance(items, list):
+        items = []
+
+    now = _utcnow()
+    with get_engine().begin() as conn:
+        conn.execute(delete(action_items).where(action_items.c.meeting_id == meeting_id))
+        for index, item in enumerate(items, start=1):
+            if not isinstance(item, dict):
+                continue
+            item_id = str(item.get("id") or f"{meeting_id}-act-{index}")
+            conn.execute(
+                insert(action_items).values(
+                    item_id=item_id,
+                    meeting_id=meeting_id,
+                    assignee=str(item.get("assignee") or ""),
+                    task=str(item.get("task") or ""),
+                    deadline=str(item.get("deadline") or ""),
+                    priority=str(item.get("priority") or "medium"),
+                    status=str(item.get("status") or "pending"),
+                    context=str(item.get("context") or ""),
+                    jira_issue_key=item.get("jira_issue_key"),
+                    feishu_task_id=item.get("feishu_task_id"),
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+
+
+def list_action_items(
+    meeting_id: str | None = None,
+    status: str | None = None,
+    assignee: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
+    stmt = select(action_items).order_by(desc(action_items.c.updated_at)).limit(limit).offset(offset)
+    if meeting_id:
+        stmt = stmt.where(action_items.c.meeting_id == meeting_id)
+    if status and status != "all":
+        stmt = stmt.where(action_items.c.status == status)
+    if assignee:
+        stmt = stmt.where(action_items.c.assignee.ilike(f"%{assignee}%"))
+    with get_engine().begin() as conn:
+        rows = conn.execute(stmt).mappings().all()
+    return [_row_to_dict(row) or {} for row in rows]
+
+
+def update_action_item_status(item_id: str, status: str) -> dict[str, Any] | None:
+    now = _utcnow()
+    stmt = (
+        update(action_items)
+        .where(action_items.c.item_id == item_id)
+        .values(status=status, updated_at=now)
+        .returning(action_items)
+    )
+    with get_engine().begin() as conn:
+        row = conn.execute(stmt).mappings().first()
+    return _row_to_dict(row)
 
 
 def _database_url() -> str:

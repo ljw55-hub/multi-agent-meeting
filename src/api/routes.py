@@ -20,9 +20,11 @@ from ..storage.database import (
     get_meeting_metadata,
     get_meeting_result,
     get_meeting_status,
+    list_action_items,
     list_meeting_metadata,
     save_meeting_result,
     save_meeting_status,
+    update_action_item_status,
     upsert_meeting_metadata,
 )
 from ..storage.vector_store import search_meeting_memories, upsert_meeting_memory
@@ -41,6 +43,10 @@ class MeetingStartRequest(BaseModel):
     title: str = ""
     participants: list[str] = []
     language: str = "zh"
+
+
+class ActionStatusUpdate(BaseModel):
+    status: str
 
 
 def _now() -> str:
@@ -206,6 +212,39 @@ async def list_meetings(limit: int = 20, offset: int = 0) -> dict[str, Any]:
             }
         )
     return {"items": items, "limit": limit, "offset": offset}
+
+
+@router.get("/api/v1/action-items")
+async def get_action_items(
+    meeting_id: str | None = None,
+    status: str | None = None,
+    assignee: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> dict[str, Any]:
+    limit = max(1, min(200, limit))
+    offset = max(0, offset)
+    return {
+        "items": list_action_items(
+            meeting_id=meeting_id,
+            status=status,
+            assignee=assignee,
+            limit=limit,
+            offset=offset,
+        ),
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+@router.patch("/api/v1/action-items/{item_id}")
+async def patch_action_item(item_id: str, request: ActionStatusUpdate) -> dict[str, Any]:
+    if request.status not in {"pending", "in_progress", "completed", "cancelled"}:
+        raise HTTPException(status_code=400, detail="status must be pending/in_progress/completed/cancelled")
+    item = update_action_item_status(item_id, request.status)
+    if not item:
+        raise HTTPException(status_code=404, detail=f"action item not found: {item_id}")
+    return item
 
 
 @router.post("/api/v1/meeting/start", status_code=201)
