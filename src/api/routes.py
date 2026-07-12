@@ -24,7 +24,7 @@ from ..storage.database import (
     list_meeting_metadata,
     save_meeting_result,
     save_meeting_status,
-    update_action_item_status,
+    update_action_item,
     upsert_meeting_metadata,
 )
 from ..storage.vector_store import search_meeting_memories, upsert_meeting_memory
@@ -46,7 +46,14 @@ class MeetingStartRequest(BaseModel):
 
 
 class ActionStatusUpdate(BaseModel):
-    status: str
+    status: str | None = None
+    assignee: str | None = None
+    task: str | None = None
+    deadline: str | None = None
+    priority: str | None = None
+    context: str | None = None
+    jira_issue_key: str | None = None
+    feishu_task_id: str | None = None
 
 
 def _now() -> str:
@@ -239,9 +246,14 @@ async def get_action_items(
 
 @router.patch("/api/v1/action-items/{item_id}")
 async def patch_action_item(item_id: str, request: ActionStatusUpdate) -> dict[str, Any]:
-    if request.status not in {"pending", "in_progress", "completed", "cancelled"}:
+    payload = request.model_dump(exclude_unset=True)
+    if "status" in payload and payload["status"] not in {"pending", "in_progress", "completed", "cancelled"}:
         raise HTTPException(status_code=400, detail="status must be pending/in_progress/completed/cancelled")
-    item = update_action_item_status(item_id, request.status)
+    if "priority" in payload and payload["priority"] not in {"low", "medium", "high", "urgent"}:
+        raise HTTPException(status_code=400, detail="priority must be low/medium/high/urgent")
+    if "task" in payload and not str(payload["task"]).strip():
+        raise HTTPException(status_code=400, detail="task cannot be empty")
+    item = update_action_item(item_id, payload)
     if not item:
         raise HTTPException(status_code=404, detail=f"action item not found: {item_id}")
     return item

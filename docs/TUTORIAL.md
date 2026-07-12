@@ -124,6 +124,16 @@ curl -X PATCH http://localhost:8000/api/v1/action-items/act-12345678 \
   -d "{\"status\":\"completed\"}"
 ```
 
+Edit an action item:
+
+```bash
+curl -X PATCH http://localhost:8000/api/v1/action-items/act-12345678 \
+  -H "Content-Type: application/json" \
+  -d "{\"assignee\":\"Alice\",\"deadline\":\"2026-07-15\",\"priority\":\"high\",\"status\":\"in_progress\"}"
+```
+
+Manual edits in the Action Board are stored in PostgreSQL. When the meeting result is synchronized again, existing action items are matched by id or by assignee/task signature so user-managed fields are preserved.
+
 ## Stream Audio
 
 The service exposes a chunked WebSocket transcription endpoint:

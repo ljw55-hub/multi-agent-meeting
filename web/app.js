@@ -117,30 +117,58 @@ async function refreshActionItems() {
   $("actionList").innerHTML = items
     .map(
       (item) => `
-        <div class="result-item action-row">
-          <div>
-            <strong>${escapeHtml(item.assignee || "Unassigned")}</strong>
-            <div>${escapeHtml(item.task)}</div>
-            <div><small>${escapeHtml(item.meeting_id)} | ${escapeHtml(item.priority)} | deadline: ${escapeHtml(item.deadline || "N/A")}</small></div>
+        <div class="result-item action-row" data-action-id="${escapeHtml(item.item_id)}">
+          <div class="action-fields">
+            <label>
+              Assignee
+              <input data-action-field="assignee" value="${escapeHtml(item.assignee || "")}" />
+            </label>
+            <label>
+              Task
+              <textarea data-action-field="task">${escapeHtml(item.task)}</textarea>
+            </label>
+            <label>
+              Deadline
+              <input data-action-field="deadline" value="${escapeHtml(item.deadline || "")}" />
+            </label>
+            <label>
+              Context
+              <input data-action-field="context" value="${escapeHtml(item.context || "")}" />
+            </label>
+            <div><small>${escapeHtml(item.meeting_id)} | ${escapeHtml(item.item_id)}</small></div>
           </div>
-          <select data-action-status="${escapeHtml(item.item_id)}">
-            <option value="pending" ${item.status === "pending" ? "selected" : ""}>Pending</option>
-            <option value="in_progress" ${item.status === "in_progress" ? "selected" : ""}>In progress</option>
-            <option value="completed" ${item.status === "completed" ? "selected" : ""}>Completed</option>
-            <option value="cancelled" ${item.status === "cancelled" ? "selected" : ""}>Cancelled</option>
-          </select>
+          <div class="action-controls">
+            <select data-action-field="priority">
+              <option value="low" ${item.priority === "low" ? "selected" : ""}>Low</option>
+              <option value="medium" ${item.priority === "medium" ? "selected" : ""}>Medium</option>
+              <option value="high" ${item.priority === "high" ? "selected" : ""}>High</option>
+              <option value="urgent" ${item.priority === "urgent" ? "selected" : ""}>Urgent</option>
+            </select>
+            <select data-action-field="status">
+              <option value="pending" ${item.status === "pending" ? "selected" : ""}>Pending</option>
+              <option value="in_progress" ${item.status === "in_progress" ? "selected" : ""}>In progress</option>
+              <option value="completed" ${item.status === "completed" ? "selected" : ""}>Completed</option>
+              <option value="cancelled" ${item.status === "cancelled" ? "selected" : ""}>Cancelled</option>
+            </select>
+            <button type="button" class="secondary" data-save-action="${escapeHtml(item.item_id)}">Save</button>
+          </div>
         </div>`
     )
     .join("");
 
-  document.querySelectorAll("[data-action-status]").forEach((select) => {
-    select.addEventListener("change", async () => {
-      await requestJson(`/api/v1/action-items/${encodeURIComponent(select.dataset.actionStatus)}`, {
+  document.querySelectorAll("[data-save-action]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const row = button.closest("[data-action-id]");
+      const payload = {};
+      row.querySelectorAll("[data-action-field]").forEach((field) => {
+        payload[field.dataset.actionField] = field.value.trim();
+      });
+      await requestJson(`/api/v1/action-items/${encodeURIComponent(button.dataset.saveAction)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: select.value }),
+        body: JSON.stringify(payload),
       });
-      showToast("Action status updated");
+      showToast("Action item updated");
       await refreshActionItems();
     });
   });

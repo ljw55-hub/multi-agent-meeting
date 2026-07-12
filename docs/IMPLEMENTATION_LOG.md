@@ -120,3 +120,10 @@ This document records major engineering changes in the project.
 - Added `GET /api/v1/action-items` with status and assignee filters.
 - Added `PATCH /api/v1/action-items/{item_id}` for status updates.
 - Added Action Board controls to the web console.
+
+## 12. Editable Action Board
+
+- Extended `PATCH /api/v1/action-items/{item_id}` to update assignee, task, deadline, priority, status, context, and external task ids.
+- Preserved manually managed action item fields when a meeting report is synchronized again.
+- Added inline editing controls to the Action Board in the web console.
+- Verified that edited action item data remains intact after resaving the same meeting result.

@@ -18,7 +18,7 @@ The system uses FastAPI as the service layer, Faster-Whisper for speech transcri
 - OpenAI-compatible LLM integration, including SiliconFlow
 - Configurable timeout, retry, fallback, and Agent parallelism
 - PostgreSQL persistence for meeting metadata, status, and reports
-- Dedicated action item table with status tracking
+- Dedicated action item table with editable assignee, task, deadline, priority, context, and status tracking
 - ChromaDB vector storage for meeting memory search
 - Redis-backed background worker for audio processing jobs
 - REST API, full-result WebSocket, and chunked transcription WebSocket entry points
@@ -53,6 +53,7 @@ Open:
 - Health check: http://localhost:8000/health
 
 The web console supports meeting creation, audio upload, progress tracking, report viewing, microphone streaming, and ChromaDB memory search.
+The Action Board can be used to review extracted tasks, edit task details, and preserve manual status changes across later report synchronization.
 
 Run a built-in demo meeting:
 

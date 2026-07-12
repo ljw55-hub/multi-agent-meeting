@@ -27,7 +27,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -65,7 +66,8 @@ button.danger {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-height: 40px;
   border: 1px solid var(--line);
@@ -73,6 +75,11 @@ select {
   background: white;
   color: var(--text);
   padding: 8px 10px;
+}
+
+textarea {
+  min-height: 74px;
+  resize: vertical;
 }
 
 label {
@@ -286,11 +293,27 @@ label {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 170px;
   gap: 12px;
-  align-items: center;
+  align-items: start;
 }
 
 .action-row select {
   min-height: 34px;
+}
+
+.action-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.action-fields label:nth-child(2),
+.action-fields div {
+  grid-column: 1 / -1;
+}
+
+.action-controls {
+  display: grid;
+  gap: 10px;
 }
 
 .progress-wrap {
@@ -399,5 +422,15 @@ label {
 
   .meeting-chip {
     min-width: 0;
+  }
+
+  .action-row,
+  .action-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .action-fields label:nth-child(2),
+  .action-fields div {
+    grid-column: auto;
   }
 }

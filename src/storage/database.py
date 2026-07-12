@@ -192,24 +192,31 @@ def sync_action_items_from_result(meeting_id: str, result: dict[str, Any]) -> No
 
     now = _utcnow()
     with get_engine().begin() as conn:
+        existing_rows = conn.execute(
+            select(action_items).where(action_items.c.meeting_id == meeting_id)
+        ).mappings().all()
+        existing_by_id = {str(row["item_id"]): row for row in existing_rows}
+        existing_by_signature = {_action_signature(row): row for row in existing_rows}
+
         conn.execute(delete(action_items).where(action_items.c.meeting_id == meeting_id))
         for index, item in enumerate(items, start=1):
             if not isinstance(item, dict):
                 continue
             item_id = str(item.get("id") or f"{meeting_id}-act-{index}")
+            previous = existing_by_id.get(item_id) or existing_by_signature.get(_action_signature(item))
             conn.execute(
                 insert(action_items).values(
                     item_id=item_id,
                     meeting_id=meeting_id,
-                    assignee=str(item.get("assignee") or ""),
-                    task=str(item.get("task") or ""),
-                    deadline=str(item.get("deadline") or ""),
-                    priority=str(item.get("priority") or "medium"),
-                    status=str(item.get("status") or "pending"),
-                    context=str(item.get("context") or ""),
-                    jira_issue_key=item.get("jira_issue_key"),
-                    feishu_task_id=item.get("feishu_task_id"),
-                    created_at=now,
+                    assignee=str(previous.get("assignee") if previous else item.get("assignee") or ""),
+                    task=str(previous.get("task") if previous else item.get("task") or ""),
+                    deadline=str(previous.get("deadline") if previous else item.get("deadline") or ""),
+                    priority=str(previous.get("priority") if previous else item.get("priority") or "medium"),
+                    status=str(previous.get("status") if previous else item.get("status") or "pending"),
+                    context=str(previous.get("context") if previous else item.get("context") or ""),
+                    jira_issue_key=(previous.get("jira_issue_key") if previous else item.get("jira_issue_key")),
+                    feishu_task_id=(previous.get("feishu_task_id") if previous else item.get("feishu_task_id")),
+                    created_at=previous.get("created_at") if previous else now,
                     updated_at=now,
                 )
             )
@@ -234,17 +241,40 @@ def list_action_items(
     return [_row_to_dict(row) or {} for row in rows]
 
 
-def update_action_item_status(item_id: str, status: str) -> dict[str, Any] | None:
-    now = _utcnow()
-    stmt = (
-        update(action_items)
-        .where(action_items.c.item_id == item_id)
-        .values(status=status, updated_at=now)
-        .returning(action_items)
-    )
+def update_action_item(item_id: str, values: dict[str, Any]) -> dict[str, Any] | None:
+    allowed = {"assignee", "task", "deadline", "priority", "status", "context", "jira_issue_key", "feishu_task_id"}
+    payload = {key: values[key] for key in allowed if key in values and values[key] is not None}
+    if not payload:
+        return get_action_item(item_id)
+    payload["updated_at"] = _utcnow()
+    stmt = update(action_items).where(action_items.c.item_id == item_id).values(**payload).returning(action_items)
     with get_engine().begin() as conn:
         row = conn.execute(stmt).mappings().first()
     return _row_to_dict(row)
+
+
+def update_action_item_status(item_id: str, status: str) -> dict[str, Any] | None:
+    return update_action_item(item_id, {"status": status})
+
+
+def get_action_item(item_id: str) -> dict[str, Any] | None:
+    with get_engine().begin() as conn:
+        row = conn.execute(select(action_items).where(action_items.c.item_id == item_id)).mappings().first()
+    return _row_to_dict(row)
+
+
+def _action_signature(item: Any) -> tuple[str, str]:
+    if isinstance(item, dict):
+        assignee = item.get("assignee", "")
+        task = item.get("task", "")
+    else:
+        assignee = item["assignee"]
+        task = item["task"]
+    return (_normalize_action_text(assignee), _normalize_action_text(task))
+
+
+def _normalize_action_text(value: Any) -> str:
+    return " ".join(str(value or "").lower().split())
 
 
 def _database_url() -> str:
