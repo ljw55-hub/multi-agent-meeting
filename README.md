@@ -146,8 +146,12 @@ WHISPERX_MODEL=small
 WHISPERX_DEVICE=cpu
 WHISPERX_COMPUTE_TYPE=int8
 DIARIZATION_ENABLED=true
+DIARIZATION_USE_PARTICIPANT_COUNT=true
+DIARIZATION_MAP_PARTICIPANTS=true
 HF_TOKEN=your-huggingface-token
 ```
+
+See `docs/SPEAKER_DIARIZATION.md` for HuggingFace authorization, pyannote model access, speaker-count settings, and participant-name mapping.
 
 When `APP_API_KEY` or `APP_API_KEYS` is configured, protected HTTP endpoints require `X-API-Key: <key>` or `Authorization: Bearer <key>`. Browser WebSocket clients pass the same key through the `api_key` query parameter.
 

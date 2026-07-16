@@ -4,6 +4,8 @@ import asyncio
 import json
 import logging
 
+from redis.exceptions import TimeoutError as RedisTimeoutError
+
 from .services.meeting_processor import process_audio_file, set_meeting_status
 from .services.queue import QUEUE_NAME, get_redis_client
 from .storage.database import init_database
@@ -28,7 +30,11 @@ async def worker_loop() -> None:
     client = get_redis_client()
     logger.info("Meeting worker started. queue=%s", QUEUE_NAME)
     while True:
-        item = await asyncio.to_thread(client.blpop, QUEUE_NAME, 5)
+        try:
+            item = await asyncio.to_thread(client.blpop, QUEUE_NAME, 5)
+        except RedisTimeoutError:
+            logger.debug("Redis BLPOP timed out; continuing worker loop")
+            continue
         if item is None:
             continue
         _, raw = item

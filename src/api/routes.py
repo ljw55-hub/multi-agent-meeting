@@ -673,27 +673,39 @@ async def websocket_transcription(websocket: WebSocket, meeting_id: str) -> None
             elif event_type == "flush":
                 await flush_transcript("partial_transcript")
             elif event_type == "stop":
-                started = time.time()
-                await flush_transcript("final_transcript")
-                await websocket.send_json({"type": "processing", "stage": "pipeline"})
-                _set_meeting_status(meeting_id, "processing", "queued", 20, "Streaming audio finalized")
-                result = await run_meeting_pipeline(
-                    meeting_id=meeting_id,
-                    audio_data=bytes(audio_buffer),
-                    audio_file_name=audio_file_name,
-                    language=language,
-                    progress_callback=_progress_callback(meeting_id),
-                )
-                data = _persist_completed_result(meeting_id, result)
-                _set_meeting_status(
+                UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+                stored_name = f"{meeting_id}-{uuid.uuid4().hex[:8]}-{Path(audio_file_name).name}"
+                audio_path = UPLOAD_DIR / stored_name
+                audio_path.write_bytes(bytes(audio_buffer))
+                metadata = upsert_meeting_metadata(
                     meeting_id,
-                    "completed",
-                    "completed",
-                    100,
-                    "Meeting processing completed",
-                    errors=data.get("errors", []),
+                    {
+                        "audio_file_name": audio_file_name,
+                        "language": language,
+                        "streaming": True,
+                        "extra": {"audio_path": str(audio_path)},
+                    },
                 )
-                await _send_pipeline_events(websocket, result, time.time() - started)
+                meeting_metadata[meeting_id] = metadata
+                _set_meeting_status(meeting_id, "queued", "queued", 20, "Streaming audio finalized and queued")
+                depth = enqueue_meeting_job(
+                    {
+                        "type": "audio_file",
+                        "meeting_id": meeting_id,
+                        "audio_path": str(audio_path),
+                        "language": language,
+                        "file_name": audio_file_name,
+                    }
+                )
+                await websocket.send_json(
+                    {
+                        "type": "queued",
+                        "meeting_id": meeting_id,
+                        "stage": "queued",
+                        "queue_depth": depth,
+                        "message": "Streaming audio queued for background analysis.",
+                    }
+                )
                 break
             elif event_type == "ping":
                 await websocket.send_json({"type": "pong"})
@@ -704,7 +716,10 @@ async def websocket_transcription(websocket: WebSocket, meeting_id: str) -> None
     except Exception as exc:
         logger.exception("Streaming transcription failed: meeting_id=%s", meeting_id)
         _set_meeting_status(meeting_id, "failed", "streaming_failed", 0, "Streaming transcription failed", [str(exc)])
-        await websocket.send_json({"type": "error", "message": str(exc)})
+        try:
+            await websocket.send_json({"type": "error", "message": str(exc)})
+        except RuntimeError:
+            logger.debug("WebSocket already closed while sending streaming error: meeting_id=%s", meeting_id)
 
 
 def _report_markdown(result: dict[str, Any]) -> str:

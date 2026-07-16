@@ -5,3 +5,4 @@
 # it downloads large ML dependencies and may require a HuggingFace token.
 whisperx>=3.3.0
 pyannote.audio>=3.3.0
+transformers>=4.57.0,<5

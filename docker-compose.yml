@@ -15,6 +15,7 @@ services:
       - "8000:8000"
     volumes:
       - ./src:/app/src
+      - ./web:/app/web
       - asr_models:/app/models
       - uploads:/app/uploads
     depends_on:

@@ -1,0 +1,26 @@
+services:
+  api:
+    build:
+      args:
+        INSTALL_WHISPERX: "true"
+        PYTORCH_INDEX_URL: https://download.pytorch.org/whl/cu128
+        WHISPERX_CONSTRAINTS: constraints-whisperx-gpu.txt
+    environment:
+      ASR_DEVICE: cuda
+      WHISPERX_DEVICE: cuda
+      WHISPERX_COMPUTE_TYPE: float16
+      WHISPERX_MODEL: ${WHISPERX_GPU_MODEL:-medium}
+    gpus: all
+
+  worker:
+    build:
+      args:
+        INSTALL_WHISPERX: "true"
+        PYTORCH_INDEX_URL: https://download.pytorch.org/whl/cu128
+        WHISPERX_CONSTRAINTS: constraints-whisperx-gpu.txt
+    environment:
+      ASR_DEVICE: cuda
+      WHISPERX_DEVICE: cuda
+      WHISPERX_COMPUTE_TYPE: float16
+      WHISPERX_MODEL: ${WHISPERX_GPU_MODEL:-medium}
+    gpus: all

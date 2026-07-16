@@ -531,6 +531,16 @@ function handleStreamMessage(data) {
     const text = data.transcript?.full_text || "暂未识别到文本。";
     $("liveTranscript").textContent = text;
   }
+  if (data.type === "queued") {
+    $("streamStatus").textContent = "录音已提交后台分析，正在处理...";
+    setProgress({
+      status: "queued",
+      stage: data.stage || "queued",
+      progress: 20,
+      message: data.message || "Streaming audio queued for background analysis.",
+    });
+    startPolling();
+  }
   if (["transcript", "summary", "actions", "insights", "followup"].includes(data.type)) {
     state.report = state.report || { meeting_id: state.meetingId };
     state.report[data.type] = data.data;
